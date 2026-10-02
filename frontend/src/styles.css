@@ -1,0 +1,145 @@
+:root {
+  --bg: #080d19;
+  --bg-2: #0d1424;
+  --panel: rgba(255, 255, 255, 0.045);
+  --panel-strong: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #e9eefb;
+  --muted: #8a97b0;
+  --accent: #4cc9f0;
+  --positive: #37d399;
+  --neutral: #96a3b8;
+  --negative: #ff6b6b;
+  --warn: #ffb703;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(1200px 600px at 20% -10%, #16244a 0%, transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, #123047 0%, transparent 55%), var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  backdrop-filter: blur(6px);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badge.is-real {
+  color: var(--accent);
+  border-color: rgba(76, 201, 240, 0.4);
+}
+
+.badge.is-mock {
+  color: var(--warn);
+  border-color: rgba(255, 183, 3, 0.35);
+}
+
+.badge.is-off {
+  color: var(--negative);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.btn {
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: rgba(76, 201, 240, 0.5);
+  color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.is-active {
+  background: rgba(76, 201, 240, 0.16);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn.is-record {
+  background: rgba(255, 107, 107, 0.18);
+  border-color: var(--negative);
+  color: #ffd0d0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px 0;
+}
