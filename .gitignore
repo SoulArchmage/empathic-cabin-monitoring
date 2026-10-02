@@ -29,3 +29,8 @@ yarn-error.log*
 .idea/
 .DS_Store
 Thumbs.db
+# Word / Office 打开文档时产生的临时锁文件（形如 ~$xxx.docx）
+~$*
+
+# ---- 与本项目无关的本地文件 ----
+PickupCounterQueue.alp
