@@ -22,8 +22,10 @@ from .base import LlmProvider
 logger = logging.getLogger(__name__)
 
 # 厂商 -> (默认接入地址, 默认模型)。地址不含 /chat/completions 后缀。
+# 注意：默认模型需与该厂商当前上架的模型 ID 保持一致（DeepSeek 官方现为
+# deepseek-flash / deepseek-v4-pro，旧的 deepseek-chat 已下线）。
 VENDORS: dict[str, tuple[str, str]] = {
-    "deepseek": ("https://api.deepseek.com/v1", "deepseek-chat"),
+    "deepseek": ("https://api.deepseek.com/v1", "deepseek-flash"),
     "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4-flash"),
     "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
     "openai": ("https://api.openai.com/v1", "gpt-4o-mini"),
@@ -35,7 +37,7 @@ class OpenAICompatProvider(LlmProvider):
 
     def __init__(self, cfg: Settings) -> None:
         default_base, default_model = VENDORS.get(
-            cfg.llm_provider, ("", "deepseek-chat")
+            cfg.llm_provider, ("", "deepseek-flash")
         )
         self.name = cfg.llm_provider
         self.model = cfg.llm_model or default_model

@@ -49,7 +49,7 @@ def ok_handler(captured: dict) -> Callable[[httpx.Request], httpx.Response]:
 def test_vendor_table_covers_task_book_providers() -> None:
     """任务书点名了智谱 GLM 与通义千问，加上 DeepSeek 与 OpenAI 共四家。"""
     assert set(VENDORS) == {"deepseek", "zhipu", "qwen", "openai"}
-    assert VENDORS["deepseek"] == ("https://api.deepseek.com/v1", "deepseek-chat")
+    assert VENDORS["deepseek"] == ("https://api.deepseek.com/v1", "deepseek-flash")
     assert VENDORS["zhipu"][1] == "glm-4-flash"
     assert all(base.startswith("https://") for base, _ in VENDORS.values())
 
@@ -65,7 +65,7 @@ async def test_deepseek_request_shape() -> None:
     assert content == '{"speech":"我在"}'
     assert captured["url"] == "https://api.deepseek.com/v1/chat/completions"
     assert captured["auth"] == "Bearer sk-test"
-    assert captured["body"]["model"] == "deepseek-chat"
+    assert captured["body"]["model"] == "deepseek-flash"
     assert captured["body"]["response_format"] == {"type": "json_object"}
     assert captured["body"]["messages"] == MESSAGES
     await provider.aclose()

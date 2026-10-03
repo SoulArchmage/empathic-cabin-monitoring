@@ -112,7 +112,7 @@ LLM_API_KEY=sk-你的DeepSeekKey
 
 | `LLM_PROVIDER` | 默认接入地址 | 默认模型 |
 |---|---|---|
-| `deepseek` | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `deepseek` | `https://api.deepseek.com/v1` | `deepseek-flash` |
 | `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
 | `qwen` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | `openai` | `https://api.openai.com/v1` | `gpt-4o-mini` |
