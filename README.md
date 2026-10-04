@@ -68,6 +68,11 @@ backend/
     db/                models / session / repo
     service/pipeline.py  顶层业务编排
   tests/               pytest 用例 + smoke.py + loadcheck.py
+perception/            独立感知服务（算法侧骨架）：情绪/认知负荷定频推送
+  protocol.py          输出契约（与 schemas.py 的状态帧对齐）
+  backends.py          感知后端抽象 + simulator（2Hz 模拟）/ replay（离线结果回放）
+  serve.py             定频 WebSocket 服务端（对接 SOURCE_MODE=external）+ 命令行入口
+  README.md            用法、时序约定与接入真实算法的方式
 frontend/
   src/
     types/contract.ts  与 schemas.py 一一对应
@@ -138,6 +143,17 @@ EXTERNAL_STATE_URL=ws://外部系统地址
 
 切换后 `/api/health` 会把对应适配层标记为 `real`，前端顶部徽标同步变化，
 避免"以为在调用真模型、实际在跑 Mock"的误判。
+
+没有现成外部系统时，本仓库自带的 `perception/` 感知服务骨架可直接充当 `EXTERNAL_STATE_URL`
+的数据源（内置模拟，无需算法与硬件；接入真实算法的方式见 `perception/README.md`）：
+
+```powershell
+python -m perception.serve        # 监听 ws://127.0.0.1:8765，默认 10Hz
+```
+
+注意：切到 `external` 后，大屏「演示剧本」按钮不再驱动数据——外部流的剧本由感知侧
+`--scenario` 决定，且计时从感知服务进程启动时算起（先起服务、后开大屏会看到剧本已推进
+一段；重启感知服务即可复位，后端会自动重连）。
 
 > 提示：真实大模型输出会被 `decision/validator.py` 做禁词与格式硬校验，
 > 不合规时自动降级为规则话术并在记录中标记 `degraded=true`，因此换任何模型都不会输出越界内容。

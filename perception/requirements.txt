@@ -1,0 +1,2 @@
+# 感知服务依赖（疏导仓后端的 requirements.txt 已包含 websockets，可跳过）
+websockets>=16.0
