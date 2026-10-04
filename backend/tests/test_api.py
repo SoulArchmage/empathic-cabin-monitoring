@@ -1,4 +1,4 @@
-"""REST 接口测试：健康检查、剧本注入、历史查询与 CSV 导出。"""
+"""REST 接口测试：健康检查、模拟注入、历史查询与 CSV 导出。"""
 
 from __future__ import annotations
 

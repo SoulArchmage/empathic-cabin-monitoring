@@ -1,4 +1,4 @@
-"""系统级接口：健康检查与演示剧本注入。"""
+"""系统级接口：健康检查与模拟演示注入。"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ async def health(request: Request) -> HealthResponse:
 
 @router.post("/scenario", response_model=dict)
 async def set_scenario(payload: ScenarioRequest, request: Request) -> dict:
-    """注入演示剧本，用于复现"平静 → 焦虑升级 → 共情干预 → 恢复"闭环。"""
+    """注入模拟演示，用于复现"平静 → 焦虑升级 → 共情干预 → 恢复"闭环。"""
     state = request.app.state
     state.source.set_scenario(payload.name)
     state.hub.broadcast(

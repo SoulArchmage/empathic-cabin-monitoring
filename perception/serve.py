@@ -2,7 +2,7 @@
 
 用法（在仓库根目录执行）：
     python -m perception.serve                                   # 内置模拟，10Hz
-    python -m perception.serve --scenario anxiety_escalation     # 换演示剧本
+    python -m perception.serve --scenario anxiety_escalation     # 换模拟演示
     python -m perception.serve --backend replay --file out.jsonl --speed 2
 
 对接疏导仓（backend/.env，改完重启后端）：
@@ -145,7 +145,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--scenario",
         default="calm",
         choices=["calm", "anxiety_escalation", "recovery", "high_load"],
-        help="simulator 剧本",
+        help="simulator 模拟",
     )
     parser.add_argument("--file", help="replay 回放文件（JSONL）")
     parser.add_argument("--speed", type=float, default=1.0, help="replay 播放倍速")

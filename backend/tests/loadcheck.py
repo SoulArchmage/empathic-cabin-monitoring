@@ -4,7 +4,7 @@
   1. 多客户端并发订阅，观察各端实际收帧率是否与采集频率一致；
   2. 故意加入一个"慢消费者"（每条消息额外 sleep），验证慢客户端不会拖垮其他客户端，
      也不会阻塞服务端广播（这是每连接队列 + drop-oldest 背压的设计目标）；
-  3. 端到端干预延迟：注入异常剧本，测量从状态异常到收到 intervention 的耗时。
+  3. 端到端干预延迟：注入异常模拟，测量从状态异常到收到 intervention 的耗时。
 
 运行方式（需先启动后端）：python -m tests.loadcheck
 """
@@ -80,7 +80,7 @@ async def main() -> None:
 
         after = (await client.get("/api/health")).json()
         print(f"[结束] 服务端帧率 {after['frame_rate_hz']} Hz，在线客户端 {after['active_clients']}")
-        print(f"[干预延迟] 剧本注入 → 收到 intervention：{latency:.2f} s（含首次去抖确认 ~1s）")
+        print(f"[干预延迟] 模拟注入 → 收到 intervention：{latency:.2f} s（含首次去抖确认 ~1s）")
         print(f"[收帧统计] 采样窗口 {DURATION:.0f}s")
         for name, item in stats.items():
             print(

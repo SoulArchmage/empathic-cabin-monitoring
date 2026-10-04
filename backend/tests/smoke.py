@@ -1,4 +1,4 @@
-"""端到端冒烟检查：WS 状态流 → 剧本注入 → 干预生成 → 历史查询 → CSV 导出。
+"""端到端冒烟检查：WS 状态流 → 模拟注入 → 干预生成 → 历史查询 → CSV 导出。
 
 以脚本方式运行（需先启动后端）：python -m tests.smoke
 """
@@ -23,7 +23,7 @@ async def main() -> None:
         received = {"state": 0, "meta": 0, "pending": 0, "intervention": 0, "speak": 0}
 
         async with websockets.connect(WS, max_size=None) as ws:
-            # 注入焦虑升级剧本，验证"状态异常 → 触发共情"闭环
+            # 注入焦虑升级模拟，验证"状态异常 → 触发共情"闭环
             await client.post("/api/scenario", json={"name": "anxiety_escalation"})
             deadline = asyncio.get_event_loop().time() + 25
             seen: list[dict] = []

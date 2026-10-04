@@ -35,8 +35,8 @@ class StateSource(abc.ABC):
 
     def set_scenario(self, name: str) -> None:
         if name not in SCENARIOS:
-            raise ValueError(f"未知剧本：{name}")
-        logger.info("切换剧本 -> %s", name)
+            raise ValueError(f"未知模拟：{name}")
+        logger.info("切换模拟 -> %s", name)
         self._scenario = name
         self._on_scenario_changed(name)
 

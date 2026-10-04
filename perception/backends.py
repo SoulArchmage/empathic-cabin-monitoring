@@ -58,7 +58,7 @@ def _classify_load(load: float) -> str:
     return "Low"
 
 
-# 剧本 -> (压力目标, 负荷目标)，输入为剧本已运行秒数
+# 每种模拟 -> (压力目标, 负荷目标)，输入为其运行秒数
 _SCENARIOS = {
     "calm": lambda t: (0.14, 24.0),
     "high_load": lambda t: (0.45, 86.0),
@@ -84,7 +84,7 @@ class SimulatorBackend(PerceptionBackend):
 
     def __init__(self, scenario: str = "calm", update_hz: float = 2.0) -> None:
         if scenario not in _SCENARIOS:
-            raise ValueError(f"未知剧本：{scenario}（可选：{', '.join(_SCENARIOS)}）")
+            raise ValueError(f"未知模拟：{scenario}（可选：{', '.join(_SCENARIOS)}）")
         self.scenario = scenario
         self.update_hz = update_hz
         self._stress, self._load = 0.14, 24.0

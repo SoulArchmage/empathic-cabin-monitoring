@@ -34,7 +34,7 @@ onUnmounted(() => window.clearInterval(timer))
         <div>
           <div class="title">智能疏导仓 · 共情语音交互与状态监测系统</div>
           <div class="subtitle muted mono">
-            会话 {{ monitor.sessionId || '—' }} · 剧本 {{ monitor.scenario }}
+            会话 {{ monitor.sessionId || '—' }} · 模拟 {{ monitor.scenario }}
           </div>
         </div>
       </div>

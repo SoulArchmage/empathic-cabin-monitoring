@@ -139,7 +139,7 @@ onMounted(load)
             </td>
           </tr>
           <tr v-if="!sessions.length">
-            <td colspan="6" class="empty">暂无历史数据，请先在实时大屏运行一段演示剧本。</td>
+            <td colspan="6" class="empty">暂无历史数据，请先在实时大屏运行一段模拟演示。</td>
           </tr>
         </tbody>
       </table>

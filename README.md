@@ -43,7 +43,7 @@ npm run dev
 ### 3. 演示流程（答辩/录屏用）
 
 1. 进入「实时大屏」，确认顶部出现绿色「通道已连接」与 `9.x Hz` 帧率徽标；
-2. 点击左侧「演示剧本」→ **焦虑升级**：约 1 秒后出现「轻度 · 主动陪伴」共情话术卡片（同时语音播报），
+2. 点击左侧「模拟演示」→ **焦虑升级**：约 1 秒后出现「轻度 · 主动陪伴」共情话术卡片（同时语音播报），
    持续约 8 秒恶化后自动升级为「高危 · 安全出口」专业转介话术；
 3. 点击 **情绪恢复**：出现「状态恢复」确认话术；
 4. 在「语音对话」面板按住说话（或直接输入文字）→ 观察 ASR 文本 → 共情回应 → 语音播报；
@@ -94,7 +94,7 @@ docs/
 | WS | `/ws/monitor` | 下行：`meta` / `state` / `pending` / `intervention` / `speak` / `scenario` |
 | WS | `/ws/voice` | 上行：`0x01+音频` 二进制帧、`{"type":"audio_end"}`、`{"type":"text","text":"…"}` |
 | GET | `/api/health` | 各适配层实现与可用性、实时帧率、在线客户端数 |
-| POST | `/api/scenario` | 注入演示剧本：`calm` / `anxiety_escalation` / `recovery` / `high_load` |
+| POST | `/api/scenario` | 注入模拟演示：`calm` / `anxiety_escalation` / `recovery` / `high_load` |
 | GET | `/api/sessions` | 会话列表（时间范围、采样点数、干预次数） |
 | GET | `/api/states` | 状态曲线采样点（1Hz 聚合），支持会话与时间范围过滤、分页 |
 | GET | `/api/interventions` | 干预记录，含触发原因、话术、策略、风险、时延、是否降级 |
@@ -151,8 +151,8 @@ EXTERNAL_STATE_URL=ws://外部系统地址
 python -m perception.serve        # 监听 ws://127.0.0.1:8765，默认 10Hz
 ```
 
-注意：切到 `external` 后，大屏「演示剧本」按钮不再驱动数据——外部流的剧本由感知侧
-`--scenario` 决定，且计时从感知服务进程启动时算起（先起服务、后开大屏会看到剧本已推进
+注意：切到 `external` 后，大屏「模拟演示」按钮不再驱动数据——外部流的模拟由感知侧
+`--scenario` 决定，且计时从感知服务进程启动时算起（先起服务、后开大屏会看到模拟已推进
 一段；重启感知服务即可复位，后端会自动重连）。
 
 > 提示：真实大模型输出会被 `decision/validator.py` 做禁词与格式硬校验，
@@ -183,5 +183,5 @@ npm run typecheck                # vue-tsc --noEmit；npm run build 也会先跑
 - `test_llm_provider.py` —— 厂商默认值、请求报文形态、错误透出、模型故障/超时降级；
 - `test_asr_provider.py` —— 工厂选择、Whisper 请求报文（multipart / 模型 / 文件名后缀）、错误透出、无 Key 未就绪；
 - `test_hub.py` —— 控制消息不被状态流阻塞、状态帧唤醒空闲发送协程、drop-oldest 背压；
-- `test_api.py` —— 健康检查、剧本切换、历史查询结构、CSV 导出；
+- `test_api.py` —— 健康检查、模拟切换、历史查询结构、CSV 导出；
 - `test_ws.py` —— 状态帧下行、1Hz 落库、语音文本上行闭环、空输入拒绝。

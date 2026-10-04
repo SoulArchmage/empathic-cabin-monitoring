@@ -36,7 +36,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
     })
-    if (!response.ok) throw new Error('剧本切换失败')
+    if (!response.ok) throw new Error('模拟切换失败')
     return (await response.json()) as { scenario: string; session_id: string }
   },
 

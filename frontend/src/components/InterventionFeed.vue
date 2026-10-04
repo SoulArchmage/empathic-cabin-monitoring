@@ -31,7 +31,7 @@ function severityText(severity: string): string {
     </div>
 
     <div v-if="!monitor.interventions.length && !monitor.pending" class="empty">
-      暂未触发干预。可在右侧切换剧本「焦虑升级」以观察完整闭环。
+      暂未触发干预。可在右侧选择模拟「焦虑升级」以观察完整闭环。
     </div>
 
     <ul class="list">

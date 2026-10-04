@@ -3,7 +3,7 @@
 两个隐变量驱动全部输出：
   stress ∈ [0,1]  —— 情绪压力（音视频情绪标签的来源）
   load   ∈ [0,100] —— 认知负荷（脑电认知负荷等级的来源）
-剧本通过改变这两个隐变量的目标值 + 平滑跟随 + 高斯噪声，产生自然的状态曲线，
+模拟通过改变这两个隐变量的目标值 + 平滑跟随 + 高斯噪声，产生自然的状态曲线，
 并支持突变（焦虑升级），从而可复现地演示"平静 → 异常 → 共情 → 恢复"闭环。
 """
 
@@ -21,7 +21,7 @@ from .base import StateSource
 
 logger = logging.getLogger(__name__)
 
-# 每个剧本的目标值函数：输入剧本已运行秒数，返回 (stress_target, load_target)
+# 每种模拟的目标值函数：输入其运行秒数，返回 (stress_target, load_target)
 _SCENARIO_TARGETS = {
     "calm": lambda t: (0.14, 24.0),
     "high_load": lambda t: (0.45, 86.0),

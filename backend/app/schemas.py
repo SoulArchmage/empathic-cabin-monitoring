@@ -103,7 +103,7 @@ EnvelopeType = Literal[
     "intervention",
     "speak",       # TTS 结果：audio_b64 或 speak_text
     "asr_final",
-    "scenario",    # 当前剧本
+    "scenario",    # 当前模拟
     "error",
 ]
 

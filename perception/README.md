@@ -26,7 +26,7 @@ GPU、摄像头、脑电采集设备，不适合塞进 Web 服务进程；本服
 ```powershell
 # 在仓库根目录执行
 python -m perception.serve                                   # 内置模拟，默认 10Hz，端口 8765
-python -m perception.serve --scenario anxiety_escalation     # 换演示剧本
+python -m perception.serve --scenario anxiety_escalation     # 换模拟演示
 python -m perception.serve --backend replay --file result.jsonl --speed 2
 ```
 
@@ -59,9 +59,9 @@ EXTERNAL_STATE_URL=ws://127.0.0.1:8765
 
 ## 演示注意
 
-- 切到 `external` 后，大屏上的「演示剧本」按钮**不再驱动数据**——剧本由本服务启动时的
-  `--scenario` 决定（按钮只会切换大屏上显示的剧本名）；
-- 剧本计时从本服务**进程启动**时开始：先启动服务、很久后才打开大屏，会看到剧本已推进
+- 切到 `external` 后，大屏上的「模拟演示」按钮**不再驱动数据**——模拟由本服务启动时的
+  `--scenario` 决定（按钮只会切换大屏上显示的模拟名）；
+- 模拟计时从本服务**进程启动**时开始：先启动服务、很久后才打开大屏，会看到模拟已推进
   过半。演示前重启一次本服务即可复位（后端会自动重连，最多等 30s）；
 - 若先启动疏导仓、后启动本服务，后端首次连接会失败并退避重试，日志出现
   "外部状态系统连接异常……N s 后重连"属正常现象，稍候即自动接入。

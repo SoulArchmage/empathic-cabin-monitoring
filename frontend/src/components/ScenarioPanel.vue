@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 演示剧本注入：答辩时一键复现"平静 → 异常 → 干预 → 恢复"完整闭环。 */
+/** 模拟演示注入：答辩时一键复现"平静 → 异常 → 干预 → 恢复"完整闭环。 */
 import { ref } from 'vue'
 
 import { api } from '../api/http'
@@ -28,7 +28,7 @@ async function apply(name: ScenarioName): Promise<void> {
 <template>
   <section class="panel">
     <h3 class="panel-title">
-      演示剧本
+      模拟演示
       <span class="badge" :class="{ 'is-real': !!monitor.scenario }">{{ monitor.scenario }}</span>
     </h3>
     <div class="list">

@@ -124,7 +124,7 @@ export interface Health {
   providers: Record<string, ProviderStatus>
 }
 
-/** 剧本中文标签，集中在一处便于界面与文档保持一致 */
+/** 模拟中文标签，集中在一处便于界面与文档保持一致 */
 export const SCENARIO_LABELS: Record<ScenarioName, string> = {
   calm: '平静常态',
   anxiety_escalation: '焦虑升级',
