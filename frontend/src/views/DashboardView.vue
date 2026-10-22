@@ -51,18 +51,18 @@ const kpis = computed(() => [
 
     <div class="columns">
       <div class="col">
-        <EmotionGauge />
+        <EmotionGauge class="grow-tall" />
         <ScenarioPanel />
         <VoicePanel />
       </div>
 
       <div class="col wide">
-        <CognitiveLoadChart />
+        <CognitiveLoadChart class="grow" />
         <StateTimeline />
       </div>
 
       <div class="col">
-        <InterventionFeed />
+        <InterventionFeed class="grow" />
       </div>
     </div>
 
@@ -75,21 +75,25 @@ const kpis = computed(() => [
 </template>
 
 <style scoped>
+/* 大屏整页保持一屏：三列撑满可视高度，仅列内可滚动区域（如干预记录列表）自行滚动 */
 .dashboard {
   display: grid;
-  gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
 }
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
 }
 
 .kpi {
   display: grid;
-  gap: 4px;
-  padding: 10px 14px;
+  gap: 2px;
+  padding: 8px 14px;
 }
 
 .kpi span {
@@ -97,7 +101,7 @@ const kpis = computed(() => [
 }
 
 .kpi strong {
-  font-size: 20px;
+  font-size: 18px;
   color: var(--accent);
 }
 
@@ -108,14 +112,28 @@ const kpis = computed(() => [
 .columns {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.8fr) minmax(300px, 1.2fr);
-  gap: 16px;
-  align-items: start;
+  gap: 12px;
+  min-height: 0;
 }
 
 .col {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 交给列内"主角"面板（曲线 / 记录流 / 情绪环）撑满剩余高度 */
+.grow {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 内容定高的面板只吸收多余空间：高度不足时改为列内滚动，而不是压缩裁切内容 */
+.grow-tall {
+  flex: 1 0 auto;
 }
 
 .footnote {
@@ -123,9 +141,24 @@ const kpis = computed(() => [
   font-size: 12px;
 }
 
+/* 窄屏回退为自然流式布局（允许页面滚动），不强行塞进一屏 */
 @media (max-width: 1280px) {
+  .dashboard {
+    height: auto;
+    grid-template-rows: none;
+  }
+
   .columns {
     grid-template-columns: 1fr;
+  }
+
+  .col {
+    overflow-y: visible;
+  }
+
+  .grow,
+  .grow-tall {
+    flex: none;
   }
 }
 </style>

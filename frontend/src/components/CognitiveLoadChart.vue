@@ -47,6 +47,7 @@ onMounted(() => {
     grid: { left: 42, right: 18, top: 26, bottom: 26 },
     tooltip: {
       trigger: 'axis',
+      confine: true,
       backgroundColor: 'rgba(13,20,36,0.92)',
       borderColor: 'rgba(255,255,255,0.12)',
       textStyle: { color: '#e9eefb', fontSize: 12 },
@@ -96,7 +97,8 @@ onMounted(() => {
       }
     ]
   })
-  resizeObserver = new ResizeObserver(() => chart?.resize())
+  // 等一帧再按最终尺寸重算：列内滚动条出现/消失会挤占可用宽度，直接 resize 会残留偏差
+  resizeObserver = new ResizeObserver(() => requestAnimationFrame(() => chart?.resize()))
   resizeObserver.observe(container.value)
   render()
 })
@@ -121,8 +123,16 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* 在整页布局里由列高决定图表高度（ResizeObserver 会自动 resize） */
+section {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+}
+
 .chart {
+  flex: 1;
   width: 100%;
-  height: 300px;
+  min-height: 240px;
 }
 </style>

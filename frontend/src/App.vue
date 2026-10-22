@@ -76,7 +76,8 @@ onUnmounted(() => window.clearInterval(timer))
 .shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .topbar {
@@ -145,6 +146,8 @@ onUnmounted(() => window.clearInterval(timer))
 
 .content {
   flex: 1;
-  padding: 16px 20px 24px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 20px 16px;
 }
 </style>

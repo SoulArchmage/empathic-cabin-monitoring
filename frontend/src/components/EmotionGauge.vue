@@ -81,7 +81,14 @@ const loadColor = computed(() => {
 </template>
 
 <style scoped>
+/* 面板被整页布局拉高时，让环形与图例垂直居中填充 */
+section {
+  display: flex;
+  flex-direction: column;
+}
+
 .gauge-wrap {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 18px;

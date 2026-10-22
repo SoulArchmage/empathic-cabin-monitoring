@@ -7,10 +7,10 @@ import { monitor } from '../state'
 import { SCENARIO_LABELS, type ScenarioName } from '../types/contract'
 
 const scenarios: { name: ScenarioName; desc: string }[] = [
-  { name: 'calm', desc: '情绪积极、认知负荷低，系统保持静默监测' },
-  { name: 'anxiety_escalation', desc: '情绪转负 + 负荷攀升，约 1s 触发首次共情陪伴，持续 8s 后升级为专业转介' },
-  { name: 'high_load', desc: '仅认知负荷升高，验证单一异常源的判定' },
-  { name: 'recovery', desc: '从异常回落至常态，触发恢复确认话术' }
+  { name: 'calm', desc: '情绪积极、负荷低，保持静默监测' },
+  { name: 'anxiety_escalation', desc: '负荷攀升，约 1s 陪伴、8s 升级转介' },
+  { name: 'high_load', desc: '仅负荷升高，验证单一异常源' },
+  { name: 'recovery', desc: '从异常回落，触发恢复确认' }
 ]
 
 const busy = ref<ScenarioName | null>(null)
@@ -48,16 +48,19 @@ async function apply(name: ScenarioName): Promise<void> {
 </template>
 
 <style scoped>
+/* 两列网格压缩高度，给整页一屏布局让出空间 */
 .list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .scenario {
   display: grid;
   gap: 4px;
+  align-content: start;
   text-align: left;
-  padding: 10px 12px;
+  padding: 9px 10px;
   line-height: 1.45;
 }
 

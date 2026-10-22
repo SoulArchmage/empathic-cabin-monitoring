@@ -31,7 +31,7 @@ function severityText(severity: string): string {
     </div>
 
     <div v-if="!monitor.interventions.length && !monitor.pending" class="empty">
-      暂未触发干预。可在右侧选择模拟「焦虑升级」以观察完整闭环。
+      暂未触发干预。可在左侧「模拟演示」中选择「焦虑升级」，观察完整闭环。
     </div>
 
     <ul class="list">
@@ -81,8 +81,16 @@ function severityText(severity: string): string {
   padding: 0;
   display: grid;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  max-height: 520px;
+}
+
+/* 窄屏回退为自然流式布局时，限制列表高度，避免页面被无限拉长 */
+@media (max-width: 1280px) {
+  .list {
+    max-height: 480px;
+  }
 }
 
 .card {
