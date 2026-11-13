@@ -21,6 +21,7 @@ from .db.session import SessionFactory, dispose_db, init_db
 from .decision.empathizer import Empathizer
 from .decision.trigger import TriggerEngine
 from .hub import ConnectionHub
+from .observability import record
 from .providers.asr.base import build_asr_provider
 from .providers.llm.base import build_llm_provider
 from .providers.tts.base import build_tts_provider
@@ -46,6 +47,24 @@ def _watch(task: asyncio.Task) -> None:
         pass
     except Exception:  # noqa: BLE001
         logger.exception("后台任务 %s 异常退出", task.get_name())
+
+
+async def _tts_selfcheck(tts) -> None:
+    """启动后做一次极短的合成自检，把结果写进 /api/health。
+
+    edge-tts 走的是微软消费级接口，Token 轮换时会在运行时静默 403；
+    不提前探测的话，界面会一直显示"已就绪"，直到第一次干预才暴露。
+    只对真实 TTS 执行，且不阻塞启动（约 1～2 秒后完成）。
+    """
+    if tts.mode != "real":
+        return
+    try:
+        result = await tts.synth("语音自检")
+    except Exception as exc:  # noqa: BLE001 - 自检失败不应影响启动
+        logger.warning("TTS 启动自检失败：%s", exc)
+        record("tts", False, f"启动自检失败：{exc}")
+        return
+    record("tts", True, f"启动自检通过（{result.voice or tts.name}）")
 
 
 @asynccontextmanager
@@ -86,6 +105,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(hub.run(), name="hub-broadcast"),
         asyncio.create_task(pipeline.run(), name="pipeline"),
         asyncio.create_task(source.run(), name="state-source"),
+        asyncio.create_task(_tts_selfcheck(tts), name="tts-selfcheck"),
     ]
     for task in tasks:
         task.add_done_callback(_watch)

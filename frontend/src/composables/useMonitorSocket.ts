@@ -6,7 +6,7 @@
 import { onMounted, onUnmounted } from 'vue'
 
 import { api } from '../api/http'
-import { pushFrame, pushIntervention, monitor, speakSignal } from '../state'
+import { pushFrame, pushIntervention, lastSpeak, monitor, speakSignal } from '../state'
 import type {
   Envelope,
   Intervention,
@@ -53,6 +53,7 @@ function dispatch(env: Envelope): void {
       pushIntervention(payload.item as unknown as Intervention)
       break
     case 'speak':
+      lastSpeak.value = payload as unknown as SpeakItem
       speakSignal.value = payload as unknown as SpeakItem
       break
     case 'scenario':

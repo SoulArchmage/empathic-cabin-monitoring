@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     asr_timeout_s: float = 20.0
     tts_provider: Literal["mock", "edge"] = "mock"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
+    # 韵律：稍慢、不抬高音高，听感更接近真人安慰而不是"播报腔"。
+    # edge-tts 的取值格式固定为 "+0%"/"-4%"/"+0Hz"，直接透传给微软接口。
+    tts_rate: str = "-4%"
+    tts_pitch: str = "+0Hz"
+    tts_timeout_s: float = 10.0  # 单次合成超时：微软接口偶发卡住时快速降级为纯文本
 
     # ---- WebSocket ----
     ws_queue_size: int = 64          # 每连接发送队列容量（背压用）

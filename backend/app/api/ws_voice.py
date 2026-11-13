@@ -23,6 +23,8 @@ import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..config import settings
+from ..observability import record
+from ..providers.asr.base import AsrError
 from ..schemas import Envelope
 
 logger = logging.getLogger(__name__)
@@ -87,10 +89,22 @@ async def voice(ws: WebSocket) -> None:
             text = await asyncio.wait_for(
                 app.state.asr.transcribe(audio, mime), timeout=settings.asr_timeout_s
             )
-        except Exception as exc:  # noqa: BLE001 - ASR 不可用时明确降级提示
+        except asyncio.TimeoutError:
+            record("asr", False, "识别超时")
+            await fail("语音识别超时，可改用文字输入")
+            return
+        except AsrError as exc:
+            # hint 是映射过的人话（如"账户余额或免费额度不足"），厂商原文只进日志
             logger.warning("ASR 转写失败：%s", exc)
+            record("asr", False, exc.hint)
+            await fail(f"{exc.hint}，可改用文字输入")
+            return
+        except Exception as exc:  # noqa: BLE001 - 兜底：任何异常都不该让连接断开
+            logger.warning("ASR 转写失败：%s", exc)
+            record("asr", False, "识别服务异常")
             await fail("语音识别服务暂不可用，可改用文字输入")
             return
+        record("asr", True, "识别成功" if text.strip() else "识别结果为空")
         await handle_utterance(text)
 
     async def handle_control(data: dict) -> None:

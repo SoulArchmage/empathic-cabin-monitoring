@@ -18,12 +18,28 @@ import logging
 import httpx
 
 from ...config import Settings
-from .base import AsrProvider
+from .base import AsrError, AsrProvider
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "whisper-1"
+
+# 常见状态码 -> 用户可读的一句话。厂商原文仍写进日志，不直接抛到界面上。
+_ERROR_HINTS = {
+    401: "语音识别 Key 无效或已失效",
+    402: "语音识别账户余额或免费额度不足",
+    403: "语音识别 Key 无权限（可能未完成实名认证）",
+    429: "语音识别调用过于频繁，请稍后再试",
+}
+
+
+def _hint_for(status: int) -> str:
+    if status in _ERROR_HINTS:
+        return _ERROR_HINTS[status]
+    if status >= 500:
+        return "语音识别服务暂时不可用"
+    return f"语音识别失败（HTTP {status}）"
 
 # 转写接口按文件名后缀判断容器格式，因此把浏览器上报的 mime 映射为扩展名
 _EXTENSIONS = {
@@ -63,15 +79,19 @@ class OpenAICompatAsrProvider(AsrProvider):
         return bool(self._api_key)
 
     async def transcribe(self, audio: bytes, mime: str = "audio/webm") -> str:
-        response = await self._client.post(
-            self.endpoint,
-            files={"file": (f"utterance.{_extension_for(mime)}", audio, mime)},
-            data={"model": self.model},
-        )
+        try:
+            response = await self._client.post(
+                self.endpoint,
+                files={"file": (f"utterance.{_extension_for(mime)}", audio, mime)},
+                data={"model": self.model},
+            )
+        except httpx.HTTPError as exc:  # 连接失败 / 超时等
+            raise AsrError("语音识别服务连接失败", f"{self.name} 请求异常：{exc}") from exc
         if response.status_code >= 400:
             # 带上厂商返回的错误体，便于排查 Key／模型名／额度问题
-            raise RuntimeError(
-                f"{self.name} 接口返回 {response.status_code}：{response.text[:300]}"
+            raise AsrError(
+                _hint_for(response.status_code),
+                f"{self.name} 接口返回 {response.status_code}：{response.text[:300]}",
             )
         return str(response.json().get("text", "")).strip()
 

@@ -37,8 +37,26 @@ function speakLocally(text: string): void {
   if (!('speechSynthesis' in window)) return
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'zh-CN'
-  utterance.rate = 1
+  // 略慢、不变调：即使退回系统发音，也尽量避免"新闻播报"式的生硬节奏
+  utterance.rate = 0.95
   utterance.pitch = 1
+  const voice = pickChineseVoice()
+  if (voice) utterance.voice = voice
   window.speechSynthesis.cancel()
   window.speechSynthesis.speak(utterance)
+}
+
+/**
+ * 系统里往往同时装着老式 SAPI 音色（Huihui/Kangkang）和 Windows 自然语音，
+ * 默认排序不一定选中后者，这里按名字优先挑自然语音，挑不到再退回任意中文音色。
+ */
+function pickChineseVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+  const chinese = voices.filter((v) => v.lang?.toLowerCase().startsWith('zh'))
+  return (
+    chinese.find((v) => /natural|xiaoxiao|yunxi|xiaoyi|yunyang/i.test(v.name)) ??
+    chinese[0] ??
+    null
+  )
 }

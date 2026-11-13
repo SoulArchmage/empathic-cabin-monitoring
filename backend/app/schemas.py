@@ -125,6 +125,11 @@ class ProviderStatus(BaseModel):
     name: str
     mode: Literal["mock", "real"]
     ready: bool
+    # 最近一次真实调用的结果：ready 只代表"配置齐不齐"，
+    # 额度耗尽 / Key 失效 / 上游 402 只能靠实际调用暴露
+    last_ok: bool | None = None
+    last_detail: str = ""
+    last_at: float = 0.0  # epoch 秒
 
 
 class HealthResponse(BaseModel):

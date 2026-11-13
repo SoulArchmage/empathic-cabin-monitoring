@@ -132,9 +132,12 @@ ASR_PROVIDER=openai
 ASR_API_KEY=sk-你的Key
 # 非默认模型或自建网关时再填 ASR_MODEL / ASR_BASE_URL 覆盖
 
-# 真实语音合成（可选，需 pip install edge-tts）
+# 真实语音合成（可选，需 pip install "edge-tts>=7.3.1"；7.2.x 会被微软接口 403）
 TTS_PROVIDER=edge
 TTS_VOICE=zh-CN-XiaoxiaoNeural
+# 韵律可调：略慢更自然（取值必须是 "-4%" / "+0Hz" 这种带单位的形式）
+TTS_RATE=-4%
+TTS_PITCH=+0Hz
 
 # 对接真实的情绪识别 / 认知负荷系统
 SOURCE_MODE=external

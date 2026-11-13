@@ -59,6 +59,11 @@ export interface ProviderStatus {
   name: string
   mode: 'mock' | 'real'
   ready: boolean
+  /** 最近一次真实调用是否成功；null = 本次启动后尚未调用 */
+  last_ok: boolean | null
+  last_detail: string
+  /** epoch 秒 */
+  last_at: number
 }
 
 export interface PendingItem {

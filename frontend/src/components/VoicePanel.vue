@@ -5,7 +5,7 @@
  */
 import { ref } from 'vue'
 
-import { monitor } from '../state'
+import { lastSpeak, monitor } from '../state'
 import { playSpeak } from '../audio'
 import { useVoiceSocket } from '../composables/useVoiceSocket'
 
@@ -19,6 +19,24 @@ function submit(): void {
   if (!text) return
   sendText(text)
   draft.value = ''
+}
+
+/** 优先复用最近一次播报的真实音频；没有 audio_b64 时才退回浏览器合成 */
+function replay(): void {
+  if (lastSpeak.value) {
+    playSpeak(lastSpeak.value)
+    return
+  }
+  const item = monitor.interventions[0]
+  if (!item) return
+  playSpeak({
+    text: item.speech,
+    audio_b64: null,
+    mime: '',
+    voice: '',
+    tts_provider: 'browser',
+    intervention_id: item.id
+  })
 }
 </script>
 
@@ -60,7 +78,7 @@ function submit(): void {
     <button
       v-if="monitor.interventions.length"
       class="btn replay"
-      @click="playSpeak({ text: monitor.interventions[0].speech, audio_b64: null, mime: '', voice: '', tts_provider: 'browser', intervention_id: monitor.interventions[0].id })"
+      @click="replay"
     >
       重播最近回应
     </button>

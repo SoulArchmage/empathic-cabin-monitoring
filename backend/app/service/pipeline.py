@@ -18,6 +18,7 @@ from ..db.repo import Repository
 from ..decision.empathizer import Empathizer
 from ..decision.trigger import TriggerEngine
 from ..hub import ConnectionHub
+from ..observability import record
 from ..providers.tts.base import TtsProvider, TtsResult
 from ..schemas import (
     Cognitive,
@@ -144,11 +145,28 @@ class PipelineService:
         return intervention
 
     async def _finalize(self, event: TriggerEvent, intervention: Intervention) -> None:
+        # 只记录真实调用了大模型的场景：severe / recovered 走规则模板，不算模型故障
+        if intervention.provider != "rule":
+            ok = not intervention.degraded
+            record(
+                "llm",
+                ok,
+                f"{intervention.provider} 生成成功" if ok else "模型输出未通过校验，已降级",
+            )
+
         tts_result: TtsResult | None = None
         try:
             tts_result = await self.tts.synth(intervention.speech)
         except Exception as exc:  # noqa: BLE001 - 语音不可用不影响文字干预
             logger.warning("语音合成失败，降级为纯文本：%s", exc)
+            record("tts", False, f"合成失败：{exc}")
+        else:
+            detail = (
+                f"{tts_result.provider} · {tts_result.voice}"
+                if tts_result.audio_b64
+                else f"{tts_result.provider}（仅文本）"
+            )
+            record("tts", True, detail)
         intervention.audio_available = bool(tts_result and tts_result.audio_b64)
 
         try:

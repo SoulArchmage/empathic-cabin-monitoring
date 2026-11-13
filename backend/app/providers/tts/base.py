@@ -44,7 +44,12 @@ def build_tts_provider(cfg: Settings) -> TtsProvider:
     if cfg.tts_provider == "edge":
         from .edge import EdgeTtsProvider
 
-        return EdgeTtsProvider(cfg.tts_voice)
+        return EdgeTtsProvider(
+            cfg.tts_voice,
+            rate=cfg.tts_rate,
+            pitch=cfg.tts_pitch,
+            timeout_s=cfg.tts_timeout_s,
+        )
     from .mock import MockTtsProvider
 
     return MockTtsProvider(cfg.tts_voice)

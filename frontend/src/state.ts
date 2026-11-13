@@ -34,6 +34,8 @@ export const monitor = reactive({
 
 /** 播报信号：由 useMonitorSocket 写入，AudioNarrator 统一消费 */
 export const speakSignal = ref<SpeakItem | null>(null)
+/** 最近一次播报内容：保留 audio_b64，供"重播最近回应"复用真实合成音频 */
+export const lastSpeak = ref<SpeakItem | null>(null)
 export const muted = ref(false)
 
 export const emotionCounts = computed(() => {

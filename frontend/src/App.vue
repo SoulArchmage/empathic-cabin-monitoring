@@ -5,6 +5,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { playSpeak, stopSpeaking } from './audio'
 import { muted, monitor, speakSignal } from './state'
 import { useMonitorSocket } from './composables/useMonitorSocket'
+import type { ProviderStatus } from './types/contract'
 
 const route = useRoute()
 useMonitorSocket()
@@ -18,6 +19,16 @@ watch(muted, (value) => {
 const providerList = computed(() =>
   Object.entries(monitor.providers).map(([key, value]) => ({ key, ...value }))
 )
+
+/** 顶栏悬浮提示：把"配置就绪"和"最近一次真实调用"分开说清楚 */
+function providerTitle(p: ProviderStatus): string {
+  const base = `${p.name}（${p.mode}）`
+  if (!p.ready) return `${base} 未就绪：缺少 Key 或配置`
+  if (!p.last_at) return `${base} · 本次启动尚未调用`
+  const at = new Date(p.last_at * 1000).toLocaleTimeString('zh-CN', { hour12: false })
+  const state = p.last_ok ? '最近调用成功' : '最近调用失败'
+  return `${base} · ${state} ${at}${p.last_detail ? ` · ${p.last_detail}` : ''}`
+}
 
 const clock = ref(new Date().toLocaleTimeString('zh-CN', { hour12: false }))
 const timer = window.setInterval(() => {
@@ -54,8 +65,16 @@ onUnmounted(() => window.clearInterval(timer))
           v-for="p in providerList"
           :key="p.key"
           class="badge"
-          :class="p.ready ? (p.mode === 'real' ? 'is-real' : 'is-mock') : 'is-off'"
-          :title="p.ready ? `${p.name}（${p.mode}）` : `${p.name} 未就绪`"
+          :class="
+            p.ready
+              ? p.last_ok === false
+                ? 'is-off'
+                : p.mode === 'real'
+                  ? 'is-real'
+                  : 'is-mock'
+              : 'is-off'
+          "
+          :title="providerTitle(p)"
         >
           {{ p.key.toUpperCase() }}·{{ p.name }}
         </span>

@@ -2,25 +2,37 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Request
 
+from ..observability import snapshot
 from ..schemas import Envelope, HealthResponse, ProviderStatus, ScenarioRequest
 
 router = APIRouter(prefix="/api", tags=["system"])
 
 
+def _status(
+    key: str, name: str, mode: Literal["mock", "real"], ready: bool
+) -> ProviderStatus:
+    """把"配置就绪度"与"最近一次真实调用结果"合并成一个状态。"""
+    rec = snapshot(key)
+    return ProviderStatus(
+        name=name,
+        mode=mode,
+        ready=ready,
+        last_ok=rec.ok,
+        last_detail=rec.detail,
+        last_at=rec.ts,
+    )
+
+
 def collect_providers(state) -> dict[str, ProviderStatus]:
     """汇总各适配层的实现与可用性，供前端常驻展示。"""
     return {
-        "llm": ProviderStatus(
-            name=state.llm.name, mode=state.llm.mode, ready=state.llm.ready
-        ),
-        "asr": ProviderStatus(
-            name=state.asr.name, mode=state.asr.mode, ready=state.asr.ready
-        ),
-        "tts": ProviderStatus(
-            name=state.tts.name, mode=state.tts.mode, ready=state.tts.ready
-        ),
+        "llm": _status("llm", state.llm.name, state.llm.mode, state.llm.ready),
+        "asr": _status("asr", state.asr.name, state.asr.mode, state.asr.ready),
+        "tts": _status("tts", state.tts.name, state.tts.mode, state.tts.ready),
         "source": ProviderStatus(
             name=state.source.name,
             mode="mock" if state.source.name == "simulator" else "real",

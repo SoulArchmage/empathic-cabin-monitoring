@@ -6,6 +6,8 @@ sqlalchemy>=2.0.48
 aiosqlite>=0.20
 websockets>=16.0
 httpx>=0.28
+# 真实 TTS（TTS_PROVIDER=edge）：7.2.x 会被微软接口 403，必须 >=7.3.1
+edge-tts>=7.3.1
 
 # --- 开发/测试 ---
 pytest>=8.0
