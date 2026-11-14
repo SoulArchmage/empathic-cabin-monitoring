@@ -26,7 +26,7 @@ async def test_health_reports_providers(client: httpx.AsyncClient) -> None:
     assert body["providers"]["llm"]["mode"] in {"mock", "real"}
 
 
-@pytest.mark.parametrize("name", ["calm", "anxiety_escalation", "recovery", "high_load"])
+@pytest.mark.parametrize("name", ["calm", "anxiety_escalation", "recovery", "fluctuation"])
 async def test_switch_scenario(client: httpx.AsyncClient, name: str) -> None:
     response = await client.post("/api/scenario", json={"name": name})
     assert response.status_code == 200

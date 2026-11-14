@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 状态色带：把最近 120 帧的状态压成一条时间轴，
- * 用于"一眼看出"异常持续了多久、干预发生在哪个位置。
+ * 状态色带：把最近 120 个情绪窗口压成一条时间轴，
+ * 用于"一眼看出"负向持续了多久、干预发生在哪个位置。
  */
 import { computed } from 'vue'
 
@@ -16,21 +16,18 @@ const slots = computed(() => {
   return [...leading, ...frames].map((frame, index) => {
     // key 必须稳定：用下标派生，避免每次重绘都因随机 key 而重建全部 DOM
     if (!frame) return { key: `pad-${index}`, color: 'transparent', title: '' }
-    const negative = frame.emotion.label === 'Negative'
-    const high = frame.cognitive.level === 'High'
-    const color = negative && high
-      ? 'var(--negative)'
-      : high
-        ? 'var(--warn)'
-        : negative
-          ? '#ff9f9f'
-          : 'var(--positive)'
+    const color =
+      frame.emotion.label === 'Negative'
+        ? 'var(--negative)'
+        : frame.emotion.label === 'Positive'
+          ? 'var(--positive)'
+          : 'var(--neutral)'
     return {
       key: `${frame.ts}-${index}`,
       color,
       title: `${new Date(frame.ts * 1000).toLocaleTimeString('zh-CN', { hour12: false })}
-情绪 ${frame.emotion.label}（${(frame.emotion.confidence * 100).toFixed(0)}%）
-负荷 ${frame.cognitive.level}（${frame.cognitive.score.toFixed(1)}）`
+窗口 ${frame.window}
+情绪 ${frame.emotion.label}（置信度 ${(frame.emotion.confidence * 100).toFixed(0)}%）`
     }
   })
 })
@@ -77,7 +74,7 @@ const markers = computed(() => {
     </div>
     <p class="hint muted">
       <span>← 较早</span>
-      <span>绿色=平稳 · 黄色=高负荷 · 浅红=负向情绪 · 深红=双重异常</span>
+      <span>绿色=积极 · 灰色=中性 · 红色=负向（每格 2 秒感知窗口）</span>
       <span>最新 →</span>
     </p>
   </section>

@@ -1,5 +1,14 @@
 """数据契约（Single Source of Truth）。
 
+本系统的输入只有一个感知通道：感知系统每 2 秒产出一个滑动窗口的三分类情绪结果，
+与它写出的 state.json 完全对齐。其中本系统只消费三个标签：
+
+    {"emotion": "Neutral", "confidence": 0.7196, "window": "55.0s - 57.0s"}
+
+情绪取值固定为 Neutral / Positive / Negative 三种。state.json 里的
+latency_ms / camera_ok / audio_ok / device / precision / frame_count / audio_samples / logs
+属于感知侧诊断信息，本系统一律忽略，避免把"算法运行细节"混进业务契约。
+
 WebSocket 下行、REST 查询、数据库落库、前端 types/contract.ts 四处共用同一套字段定义，
 避免字段漂移。任何新增字段先改这里，再同步前端类型。
 """
@@ -12,11 +21,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+# 情绪只有三类，顺序与感知系统一致：Positive / Neutral / Negative
 EmotionLabel = Literal["Positive", "Negative", "Neutral"]
-CognitiveLevel = Literal["Low", "Medium", "High"]
 Severity = Literal["normal", "mild", "severe"]
 Strategy = Literal["呼吸引导", "共情复述", "环境调节", "轻量提问"]
 Risk = Literal["low", "medium", "high"]
+ScenarioName = Literal["calm", "anxiety_escalation", "recovery", "fluctuation"]
 
 
 def now_ts() -> float:
@@ -35,18 +45,13 @@ class Emotion(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
-class Cognitive(BaseModel):
-    level: CognitiveLevel
-    score: float = Field(ge=0.0, le=100.0)
-
-
 class StateFrame(BaseModel):
-    """一路多模态状态采样：音视频情绪标签 + 脑电认知负荷等级。"""
+    """一个感知窗口的结果：情绪标签 + 置信度 + 窗口区间（与 state.json 对齐）。"""
 
     ts: float = Field(default_factory=now_ts)
     session_id: str = Field(default_factory=new_session_id)
     emotion: Emotion
-    cognitive: Cognitive
+    window: str = ""            # 形如 "55.0s - 57.0s"，感知系统给什么就原样展示什么
     source: str = "simulator"
 
 
@@ -56,18 +61,21 @@ class StateFrame(BaseModel):
 class WindowStats(BaseModel):
     """触发判定依据，写入干预记录便于事后复核与答辩举证。"""
 
-    window_size: int = 0
+    window: str = ""              # 触发时最新的感知窗口
+    window_size: int = 0          # 参与统计的窗口数
     negative_ratio: float = 0.0
-    high_load_ratio: float = 0.0
+    positive_ratio: float = 0.0
+    neutral_ratio: float = 0.0
+    avg_confidence: float = 0.0
+    negative_confidence: float = 0.0  # 窗口内 Negative 片段的平均置信度
     consec_abnormal: int = 0
-    avg_cognitive_score: float = 0.0
     duration_s: float = 0.0
 
 
 class TriggerEvent(BaseModel):
     ts: float = Field(default_factory=now_ts)
     session_id: str
-    kind: str                      # negative_emotion / high_cognitive_load / combined
+    kind: str                      # negative_emotion / recovered / stable
     severity: Severity
     reason: str                    # 人类可读的触发原因
     stats: WindowStats
@@ -118,7 +126,7 @@ class Envelope(BaseModel):
 
 
 class ScenarioRequest(BaseModel):
-    name: Literal["calm", "anxiety_escalation", "recovery", "high_load"]
+    name: ScenarioName
 
 
 class ProviderStatus(BaseModel):
@@ -163,8 +171,7 @@ class StatePoint(BaseModel):
     session_id: str
     emotion_label: EmotionLabel
     emotion_confidence: float
-    cognitive_level: CognitiveLevel
-    cognitive_score: float
+    window: str = ""
     source: str
 
 

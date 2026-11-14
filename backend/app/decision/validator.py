@@ -56,25 +56,13 @@ FALLBACK_LIBRARY: dict[tuple[str, Severity], tuple[str, Strategy]] = {
         SAFE_REFERRAL_SPEECH,
         "共情复述",
     ),
-    ("high_cognitive_load", "mild"): (
-        "感觉你脑子里的东西有点多。我们把节奏放慢一点，先停三秒再继续。",
-        "环境调节",
-    ),
-    ("high_cognitive_load", "severe"): (
-        "负荷有点高了，先别硬撑。跟着我把肩膀放松、吸气四秒、呼气六秒，重复三次。",
-        "呼吸引导",
-    ),
-    ("combined", "mild"): (
-        "你现在又累又沉，这种感觉我理解。先什么都不用决定，靠一靠，慢慢呼吸。",
-        "呼吸引导",
-    ),
-    ("combined", "severe"): (
-        SAFE_REFERRAL_SPEECH,
-        "共情复述",
-    ),
     ("recovered", "normal"): (
         "刚才那种紧绷感慢慢退下去了，你做得很好。把这份平稳多留一会儿。",
         "环境调节",
+    ),
+    ("stable", "normal"): (
+        "我在呢。你想聊点什么，或者就安静待一会儿，都可以。",
+        "共情复述",
     ),
 }
 
@@ -134,7 +122,7 @@ def _coerce_risk(value: object, severity: Severity) -> Risk:
 def fallback_for(event: TriggerEvent) -> ValidatedSpeech:
     key = (event.kind, event.severity)
     speech, strategy = FALLBACK_LIBRARY.get(
-        key, FALLBACK_LIBRARY[("combined", "severe")]
+        key, FALLBACK_LIBRARY[("negative_emotion", "severe")]
     )
     return ValidatedSpeech(
         speech=speech,

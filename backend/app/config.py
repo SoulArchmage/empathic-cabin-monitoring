@@ -3,6 +3,9 @@
 设计意图：任务书要求系统需接入"现有数据源"与"外部大模型/语音 API"，
 二者都属于会变化的外部依赖，因此把它们的开关与参数全部收敛到配置层，
 业务代码只依赖接口，切换实现时仅需改 .env。
+
+数据源节奏约定：感知系统按 2 秒滑动窗口输出一条结果（与 state.json 的
+"window": "55.0s - 57.0s" 一致），因此本系统按窗口消费，sample_hz = 0.5。
 """
 
 from functools import lru_cache
@@ -30,17 +33,25 @@ class Settings(BaseSettings):
     ]
 
     # ---- 数据接入层 ----
-    source_mode: Literal["simulator", "external"] = "simulator"
-    sample_hz: float = 10.0          # 状态帧采集频率
-    external_state_url: str = ""     # 外部情绪/脑电系统 WebSocket 地址
+    # simulator: 内置模拟（窗口级，形态与 state.json 一致）
+    # external : 感知系统 WebSocket（EXTERNAL_STATE_URL）
+    # file     : 直接读感知系统写出的 state.json（STATE_FILE），每 0.3s 查一次新窗口
+    source_mode: Literal["simulator", "external", "file"] = "simulator"
+    sample_hz: float = 0.5           # 窗口到达速率：每 2s 一个窗口
+    window_seconds: float = 2.0      # 感知窗口长度，用于模拟器构造 "55.0s - 57.0s"
+    external_state_url: str = ""     # 感知系统 WebSocket 地址
+    state_file: str = ""             # 感知系统写出的 state.json 路径
+    file_poll_s: float = 0.3         # file 模式轮询间隔
 
     # ---- 触发引擎（抗幻觉第一道防线：先判定，再调 LLM）----
-    trigger_window: int = 15         # 滑动窗口帧数
-    trigger_min_consec: int = 10     # 确认异常所需连续帧数（去抖）
-    trigger_ratio: float = 0.6       # 窗口内异常占比阈值
+    # 0.5Hz 下 1 帧 = 2s：窗口 4 帧 = 8s，连续 2 帧 = 4s
+    trigger_window: int = 4          # 滑动窗口帧数
+    trigger_min_consec: int = 2      # 确认异常所需连续帧数（去抖）
+    trigger_ratio: float = 0.5       # 窗口内 Negative 占比阈值
+    trigger_min_confidence: float = 0.55  # Negative 片段的最低平均置信度
     trigger_cooldown_s: float = 60.0 # 同类干预冷却期
-    trigger_recovery_frames: int = 20  # 判定恢复常态所需连续帧数
-    trigger_escalate_after_s: float = 8.0  # 异常持续超过该时长才升级为 severe
+    trigger_recovery_frames: int = 2 # 判定恢复常态所需连续帧数
+    trigger_escalate_after_s: float = 6.0  # 异常持续超过该时长才升级为 severe
 
     # ---- 持久化 ----
     db_url: str = "sqlite+aiosqlite:///./data/soothe.db"

@@ -32,20 +32,27 @@ def test_monitor_stream_pushes_state_frames() -> None:
             assert "providers" in meta["payload"]
 
             states = 0
-            deadline = time.time() + 5
-            while states < 5 and time.time() < deadline:
+            deadline = time.time() + 10
+            # 感知窗口每 2s 一个，3 个窗口即可验证下行链路
+            while states < 3 and time.time() < deadline:
                 message = ws.receive_json()
                 if message["type"] == "state":
                     frame = message["payload"]["frame"]
                     assert frame["emotion"]["label"] in {"Positive", "Negative", "Neutral"}
-                    assert 0 <= frame["cognitive"]["score"] <= 100
+                    assert 0.0 <= frame["emotion"]["confidence"] <= 1.0
+                    assert frame["window"].endswith("s"), "窗口区间未下发"
+                    assert "cognitive" not in frame, "认知负荷字段已从契约中移除"
                     states += 1
-            assert states >= 5, "未在预期时间内收到足够的状态帧"
+            assert states >= 3, "未在预期时间内收到足够的状态帧"
 
         # 状态帧按 1Hz 聚合落库，轮询等待一个落库周期
         assert wait_until(lambda: client.get("/api/states").json()["total"] >= 1), (
             "状态曲线未落库"
         )
+
+        point = client.get("/api/states").json()["items"][0]
+        assert point["emotion_label"] in {"Positive", "Negative", "Neutral"}
+        assert "window" in point and "cognitive_score" not in point
 
 
 def test_voice_text_roundtrip_persists_intervention() -> None:

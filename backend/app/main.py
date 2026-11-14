@@ -28,15 +28,18 @@ from .providers.tts.base import build_tts_provider
 from .service.pipeline import PipelineService
 from .sources.base import StateSource
 from .sources.external import ExternalSource
+from .sources.file import FileSource
 from .sources.simulator import SimulatorSource
 
 logger = logging.getLogger(__name__)
 
 
 def build_source(bus: EventBus) -> StateSource:
+    if settings.source_mode == "file":
+        return FileSource(bus, settings.sample_hz, settings)
     if settings.source_mode == "external":
         return ExternalSource(bus, settings.sample_hz, settings)
-    return SimulatorSource(bus, settings.sample_hz)
+    return SimulatorSource(bus, settings.sample_hz, settings)
 
 
 def _watch(task: asyncio.Task) -> None:

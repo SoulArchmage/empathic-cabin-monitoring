@@ -13,7 +13,7 @@ import type {
   StateFrame
 } from './types/contract'
 
-const MAX_FRAMES = 300 // 滑动窗口：约 30 秒 @10Hz，兼顾观感与渲染开销
+const MAX_FRAMES = 300 // 滑动窗口：约 10 分钟 @0.5Hz（每 2s 一个情绪窗口），兼顾观感与渲染开销
 const MAX_INTERVENTIONS = 50
 
 export const monitor = reactive({
@@ -37,6 +37,10 @@ export const speakSignal = ref<SpeakItem | null>(null)
 /** 最近一次播报内容：保留 audio_b64，供"重播最近回应"复用真实合成音频 */
 export const lastSpeak = ref<SpeakItem | null>(null)
 export const muted = ref(false)
+/** 浏览器拦截了自动播放：需要用户点击一次页面才能出声 */
+export const audioBlocked = ref(false)
+/** 当前是否正在播报（用于顶栏状态提示） */
+export const audioPlaying = ref(false)
 
 export const emotionCounts = computed(() => {
   const counts = { Positive: 0, Neutral: 0, Negative: 0 }

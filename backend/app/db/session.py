@@ -6,6 +6,7 @@ import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -44,9 +45,37 @@ engine = create_async_engine(DSN, echo=False, future=True)
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
+def _prepare_schema(conn) -> None:
+    """建表；旧版状态表（含认知负荷字段）就地迁移，保留历史曲线。
+
+    旧版表结构与新契约的差异只有两列：少了 window、多了 cognitive_level / cognitive_score。
+    因此不做"删表重建"（那会丢掉历史曲线），而是补 window 列、删认知负荷列。
+    旧数据的 window 为空串，查询侧已按 "—" 处理。
+    """
+    inspector = inspect(conn)
+    if "state_frames" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("state_frames")}
+        legacy = {"cognitive_level", "cognitive_score"} & columns
+        if "window" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE state_frames ADD COLUMN window VARCHAR(32) "
+                    "NOT NULL DEFAULT ''"
+                )
+            )
+        for name in legacy:
+            conn.execute(text(f"ALTER TABLE state_frames DROP COLUMN {name}"))
+        if legacy:
+            logger.info(
+                "已迁移旧版状态表：移除 %s 并补充 window 列（历史数据保留）",
+                " / ".join(sorted(legacy)),
+            )
+    Base.metadata.create_all(conn)
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_prepare_schema)
     logger.info("数据库就绪：%s", DSN)
 
 

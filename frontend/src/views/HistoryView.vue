@@ -147,7 +147,7 @@ onMounted(load)
 
     <section class="panel">
       <h3 class="panel-title">
-        状态曲线采样点（1Hz 聚合）
+        状态曲线采样点（每 2s 情绪窗口）
         <span class="badge mono">共 {{ stateTotal }} 条</span>
       </h3>
       <table>
@@ -157,8 +157,7 @@ onMounted(load)
             <th>会话</th>
             <th>情绪</th>
             <th>置信度</th>
-            <th>认知等级</th>
-            <th>负荷分值</th>
+            <th>感知窗口</th>
             <th>数据源</th>
           </tr>
         </thead>
@@ -168,12 +167,11 @@ onMounted(load)
             <td class="mono">{{ item.session_id }}</td>
             <td>{{ item.emotion_label }}</td>
             <td class="mono">{{ (item.emotion_confidence * 100).toFixed(1) }}%</td>
-            <td>{{ item.cognitive_level }}</td>
-            <td class="mono">{{ item.cognitive_score.toFixed(1) }}</td>
+            <td class="mono">{{ item.window || '—' }}</td>
             <td class="muted">{{ item.source }}</td>
           </tr>
           <tr v-if="!states.length">
-            <td colspan="7" class="empty">无数据</td>
+            <td colspan="6" class="empty">无数据</td>
           </tr>
         </tbody>
       </table>

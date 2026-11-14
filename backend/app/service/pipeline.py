@@ -21,7 +21,6 @@ from ..hub import ConnectionHub
 from ..observability import record
 from ..providers.tts.base import TtsProvider, TtsResult
 from ..schemas import (
-    Cognitive,
     Emotion,
     Envelope,
     StateFrame,
@@ -36,7 +35,7 @@ def _majority(values: list[str]) -> str:
 
 
 def aggregate_frames(frames: list[StateFrame]) -> StateFrame:
-    """把 1 秒内的若干个原始帧聚合为一个采样点（降频落库）。"""
+    """把 1 秒内的若干个窗口结果聚合为一个采样点（降频落库）。"""
     last = frames[-1]
     n = len(frames)
     return StateFrame(
@@ -46,10 +45,7 @@ def aggregate_frames(frames: list[StateFrame]) -> StateFrame:
             label=_majority([f.emotion.label for f in frames]),  # type: ignore[arg-type]
             confidence=round(sum(f.emotion.confidence for f in frames) / n, 3),
         ),
-        cognitive=Cognitive(
-            level=_majority([f.cognitive.level for f in frames]),  # type: ignore[arg-type]
-            score=round(sum(f.cognitive.score for f in frames) / n, 2),
-        ),
+        window=last.window,
         source=last.source,
     )
 

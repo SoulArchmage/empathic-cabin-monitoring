@@ -1,4 +1,4 @@
-"""Prompt 工程：把"情绪 + 认知"状态向量翻译为结构化共情话术的提示词。
+"""Prompt 工程：把"情绪三分类 + 置信度 + 窗口"状态翻译为结构化共情话术的提示词。
 
 采用五段式结构（角色 / 约束 / 输入 / 输出模式 / 示例），并强制 JSON 输出，
 便于下游做机器校验（见 validator.py）。用户消息里保留一行 [STATE] 机器可读摘要，
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from ..schemas import TriggerEvent
+from ..schemas import TriggerEvent, WindowStats
 
 SYSTEM_PROMPT = """你是智能疏导仓内的心理安抚助手"小仓"。你的职责是情绪陪伴与放松引导。
 
@@ -28,7 +28,8 @@ _FEW_SHOT = [
         "role": "user",
         "content": (
             '[STATE] {"kind": "negative_emotion", "severity": "mild", '
-            '"emotion": "Negative", "cognitive_score": 45}\n'
+            '"emotion": "Negative", "confidence": 0.78, "negative_ratio": 0.5, '
+            '"window": "55.0s - 57.0s", "duration_s": 4.0}\n'
             "请生成安抚话术。"
         ),
     },
@@ -42,8 +43,9 @@ _FEW_SHOT = [
     {
         "role": "user",
         "content": (
-            '[STATE] {"kind": "combined", "severity": "severe", '
-            '"emotion": "Negative", "cognitive_score": 86}\n'
+            '[STATE] {"kind": "negative_emotion", "severity": "severe", '
+            '"emotion": "Negative", "confidence": 0.91, "negative_ratio": 1.0, '
+            '"window": "65.0s - 67.0s", "duration_s": 10.0}\n'
             "请生成安抚话术。"
         ),
     },
@@ -57,23 +59,32 @@ _FEW_SHOT = [
 ]
 
 _KIND_DESC = {
-    "negative_emotion": "音视频情绪识别持续为 Negative（负向情绪）",
-    "high_cognitive_load": "脑电认知负荷持续处于 High（高负荷）",
-    "combined": "负向情绪与高认知负荷同时持续",
-    "recovered": "状态已从异常回落至常态",
+    "negative_emotion": "情绪识别在连续多个 2 秒窗口内判为 Negative（负向情绪）",
+    "recovered": "情绪已从负向回落至常态区间",
+    "stable": "当前情绪平稳，没有持续负向",
 }
+
+
+def _dominant(stats: WindowStats) -> str:
+    ratios = {
+        "Positive": stats.positive_ratio,
+        "Neutral": stats.neutral_ratio,
+        "Negative": stats.negative_ratio,
+    }
+    return max(ratios, key=ratios.get)
 
 
 def state_digest(event: TriggerEvent) -> str:
     """机器可读的状态摘要，供模型、Mock Provider 与审计日志共用。"""
+    stats = event.stats
     payload = {
         "kind": event.kind,
         "severity": event.severity,
-        "emotion": "Negative" if event.stats and event.stats.negative_ratio >= 0.5 else "Normal",
-        "cognitive_score": round(event.stats.avg_cognitive_score, 1) if event.stats else 0.0,
-        "negative_ratio": event.stats.negative_ratio if event.stats else 0.0,
-        "high_load_ratio": event.stats.high_load_ratio if event.stats else 0.0,
-        "duration_s": event.stats.duration_s if event.stats else 0.0,
+        "emotion": _dominant(stats),
+        "confidence": round(stats.negative_confidence or stats.avg_confidence, 3),
+        "negative_ratio": stats.negative_ratio if stats else 0.0,
+        "window": stats.window if stats else "",
+        "duration_s": stats.duration_s if stats else 0.0,
     }
     return "[STATE] " + json.dumps(payload, ensure_ascii=False)
 
@@ -95,7 +106,7 @@ def build_messages(event: TriggerEvent, hint: str | None = None) -> list[dict[st
 def build_reply_messages(
     event: TriggerEvent, user_text: str, hint: str | None = None
 ) -> list[dict[str, str]]:
-    """构造语音对话回复的提示词：把用户原话 + 实时状态一起交给模型。"""
+    """构造语音对话回复的提示词：把用户原话 + 实时情绪状态一起交给模型。"""
     lines = [
         state_digest(event),
         f"用户刚刚说：「{user_text}」",

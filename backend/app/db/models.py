@@ -1,7 +1,8 @@
-"""数据库模型：状态曲线 + 干预记录两张表。
+"""数据库模型：情绪窗口采样 + 干预记录两张表。
 
-设计取舍：状态帧以 10Hz 采集，但只按 1Hz 聚合落库。原因是任务书要求"记录状态变化曲线"，
-而 10Hz 原始数据长时间运行会让 SQLite 迅速膨胀，1Hz 聚合已足够刻画曲线形态。
+设计取舍：感知系统每 2 秒给出一个窗口，但状态表只按 persist_hz（默认 1Hz）聚合落库，
+既保证曲线形态，又避免 SQLite 长时间运行后膨胀。落库保留 window 字段，
+使历史曲线上的每个点都能追溯到感知系统当时给出的窗口区间，便于答辩举证。
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 class StateFrameRecord(Base):
-    """状态曲线采样点（1Hz 聚合）。"""
+    """情绪窗口采样点（默认 1Hz 聚合）。"""
 
     __tablename__ = "state_frames"
 
@@ -24,8 +25,7 @@ class StateFrameRecord(Base):
     ts: Mapped[float] = mapped_column(Float, index=True)
     emotion_label: Mapped[str] = mapped_column(String(16))
     emotion_confidence: Mapped[float] = mapped_column(Float)
-    cognitive_level: Mapped[str] = mapped_column(String(16))
-    cognitive_score: Mapped[float] = mapped_column(Float)
+    window: Mapped[str] = mapped_column(String(32), default="")
     source: Mapped[str] = mapped_column(String(32), default="simulator")
 
     __table_args__ = (Index("ix_state_session_ts", "session_id", "ts"),)

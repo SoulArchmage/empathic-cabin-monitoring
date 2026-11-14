@@ -1,7 +1,7 @@
 """Mock 大模型：无需 API Key 即可跑通全链路。
 
 它不是"随便返回一句固定文案"，而是解析 Prompt 中的 [STATE] 摘要，
-按 (异常类型, 认知负荷) 从话术池中选槽位，因此演示时语义与真实状态一致。
+按 (状态类型, 负向占比/置信度) 从话术池中选槽位，因此演示时语义与真实状态一致。
 同时保留一小段固定延迟，用于验证任务书要求的"大模型响应慢时的占位交互体验"。
 """
 
@@ -20,19 +20,12 @@ _POOL: dict[str, list[tuple[str, str]]] = {
         ("我们先不急着解决问题，先让自己松一口气，好吗？", "呼吸引导"),
         ("这一下午好像挺耗神的。要不要把灯光调柔和一点，我陪你静一会儿。", "环境调节"),
     ],
-    "high_cognitive_load": [
-        ("感觉你脑子里的东西有点多。我们把节奏放慢，先停三秒再继续。", "环境调节"),
-        ("此刻任务有点挤，我们先只做一件事，其余的先放着。", "轻量提问"),
-        ("跟着我：吸气四秒，呼气六秒，重复三次，让大脑先降一降速。", "呼吸引导"),
-        ("你不用一次想清楚所有事，慢慢来，我在这儿。", "共情复述"),
-    ],
-    "combined": [
-        ("你现在又累又沉，这种感觉我理解。先什么都不用决定，靠一靠，慢慢呼吸。", "呼吸引导"),
-        ("我感觉到你已经撑了很久了。我们先停一下，把呼吸放慢，其余交给我记着。", "共情复述"),
-        ("这会儿信息太多了。我们先把眼睛闭上十秒，再决定下一步做什么。", "环境调节"),
-    ],
     "recovered": [
         ("刚才那种紧绷感慢慢退下去了，你做得很好。把这份平稳多留一会儿。", "环境调节"),
+    ],
+    "stable": [
+        ("我在呢。你想聊点什么，或者就安静待一会儿，都可以。", "共情复述"),
+        ("现在这样挺好的，我们慢慢来，不着急。", "环境调节"),
     ],
 }
 
@@ -61,9 +54,9 @@ class MockLlmProvider(LlmProvider):
         speech, strategy = self._random.choice(pool)
 
         risk = "low"
-        if digest.get("severity") == "severe" or digest.get("cognitive_score", 0) >= 80:
+        if digest.get("severity") == "severe" or digest.get("negative_ratio", 0) >= 0.85:
             risk = "high"
-        elif digest.get("cognitive_score", 0) >= 52:
+        elif digest.get("negative_ratio", 0) >= 0.5 or digest.get("confidence", 0) >= 0.85:
             risk = "medium"
 
         return json.dumps(

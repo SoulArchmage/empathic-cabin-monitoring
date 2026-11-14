@@ -13,14 +13,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import statistics
+import os
 import time
 
 import httpx
 import websockets
 
-BASE = "http://127.0.0.1:8000"
-WS = "ws://127.0.0.1:8000/ws/monitor"
+# 支持指向非默认端口：$env:LOADCHECK_BASE="http://127.0.0.1:8011"; python -m tests.loadcheck
+BASE = os.environ.get("LOADCHECK_BASE", "http://127.0.0.1:8000").rstrip("/")
+WS = BASE.replace("http://", "ws://").replace("https://", "wss://") + "/ws/monitor"
 DURATION = 20.0
 SLOW_DELAY = 0.35  # 慢消费者每条消息的处理耗时
 
@@ -48,18 +49,21 @@ async def subscriber(name: str, delay: float, stop_at: float, stats: dict) -> No
                     await asyncio.sleep(delay)
     finally:
         span = DURATION
+        ordered = sorted(gaps)
         stats[name] = {
             "frames": frames,
             "rate_hz": round(frames / span, 2),
             "max_gap_ms": round(max(gaps) * 1000, 1) if gaps else 0.0,
-            "p95_gap_ms": round(statistics.quantiles(gaps, n=20)[18] * 1000, 1) if len(gaps) > 20 else 0.0,
+            "p95_gap_ms": round(ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))] * 1000, 1)
+            if ordered
+            else 0.0,
         }
 
 
 async def main() -> None:
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as client:
         before = (await client.get("/api/health")).json()
-        print(f"[基线] 服务端帧率 {before['frame_rate_hz']} Hz，在线客户端 {before['active_clients']}")
+        print(f"[基线] 服务端窗口率 {before['frame_rate_hz']} Hz，在线客户端 {before['active_clients']}")
 
         stop_at = time.time() + DURATION
         stats: dict = {}
@@ -79,12 +83,12 @@ async def main() -> None:
         await asyncio.gather(*tasks)
 
         after = (await client.get("/api/health")).json()
-        print(f"[结束] 服务端帧率 {after['frame_rate_hz']} Hz，在线客户端 {after['active_clients']}")
-        print(f"[干预延迟] 模拟注入 → 收到 intervention：{latency:.2f} s（含首次去抖确认 ~1s）")
-        print(f"[收帧统计] 采样窗口 {DURATION:.0f}s")
+        print(f"[结束] 服务端窗口率 {after['frame_rate_hz']} Hz，在线客户端 {after['active_clients']}")
+        print(f"[干预延迟] 模拟注入 → 收到 intervention：{latency:.2f} s（含首次去抖确认约 4~8s）")
+        print(f"[收帧统计] 采样窗口 {DURATION:.0f}s（每 2s 一个情绪窗口）")
         for name, item in stats.items():
             print(
-                f"  - {name:<22} 收帧 {item['frames']:>4} 帧  "
+                f"  - {name:<22} 收窗口 {item['frames']:>4} 个  "
                 f"实测 {item['rate_hz']:>5} Hz  "
                 f"最大间隔 {item['max_gap_ms']:>6} ms  P95 间隔 {item['p95_gap_ms']:>6} ms"
             )

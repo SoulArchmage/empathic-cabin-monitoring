@@ -76,7 +76,7 @@ function replay(): void {
     <p v-if="voiceError" class="error">{{ voiceError }}</p>
 
     <button
-      v-if="monitor.interventions.length"
+      v-if="lastSpeak || monitor.interventions.length"
       class="btn replay"
       @click="replay"
     >
@@ -84,8 +84,8 @@ function replay(): void {
     </button>
 
     <p class="muted tip">
-      当前 ASR/TTS 若为 Mock 模式，将由浏览器原生语音能力承担播报；
-      配置云服务后同一套界面自动切换为真实语音。
+      若听不到声音，请先点击页面任意处（浏览器要求一次用户手势才允许自动播放），
+      并检查标签页是否静音、系统音量是否打开；顶部按钮会如实显示「点击启用语音 / 正在播报」。
     </p>
   </section>
 </template>

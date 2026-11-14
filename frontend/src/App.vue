@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 
-import { playSpeak, stopSpeaking } from './audio'
-import { muted, monitor, speakSignal } from './state'
+import { playSpeak, stopSpeaking, unlockAudio } from './audio'
+import { audioBlocked, audioPlaying, muted, monitor, speakSignal } from './state'
 import { useMonitorSocket } from './composables/useMonitorSocket'
 import type { ProviderStatus } from './types/contract'
 
@@ -14,6 +14,29 @@ useMonitorSocket()
 watch(speakSignal, (item) => playSpeak(item))
 watch(muted, (value) => {
   if (value) stopSpeaking()
+})
+
+/**
+ * 浏览器自动播放策略：页面没有用户手势时，WS 推送触发的 audio.play() 会被拒绝。
+ * 首次点击/按键时解锁音频元素，并自动补播刚才被拦截的内容。
+ */
+function onFirstGesture(): void {
+  unlockAudio()
+}
+
+function toggleAudio(): void {
+  if (!muted.value && audioBlocked.value) {
+    // unlockAudio 成功后会自己补播被拦截的那条，这里不再重复调用 retryPending
+    unlockAudio()
+    return
+  }
+  muted.value = !muted.value
+}
+
+const audioHint = computed(() => {
+  if (muted.value) return '语音已静音'
+  if (audioBlocked.value) return '点击启用语音'
+  return audioPlaying.value ? '正在播报' : '语音已就绪'
 })
 
 const providerList = computed(() =>
@@ -34,7 +57,15 @@ const clock = ref(new Date().toLocaleTimeString('zh-CN', { hour12: false }))
 const timer = window.setInterval(() => {
   clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }, 1000)
-onUnmounted(() => window.clearInterval(timer))
+onMounted(() => {
+  window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true })
+  window.addEventListener('keydown', onFirstGesture, { once: true })
+})
+onUnmounted(() => {
+  window.clearInterval(timer)
+  window.removeEventListener('pointerdown', onFirstGesture)
+  window.removeEventListener('keydown', onFirstGesture)
+})
 </script>
 
 <template>
@@ -59,7 +90,7 @@ onUnmounted(() => window.clearInterval(timer))
         <span class="badge" :class="monitor.connected ? 'is-real' : 'is-off'">
           <i class="dot" />{{ monitor.connected ? '通道已连接' : '连接中断' }}
         </span>
-        <span class="badge mono">{{ monitor.serverFrameRate }} Hz</span>
+        <span class="badge mono">{{ monitor.serverFrameRate }} 窗口/s</span>
         <span class="badge mono">在线 {{ monitor.activeClients }}</span>
         <span
           v-for="p in providerList"
@@ -78,8 +109,17 @@ onUnmounted(() => window.clearInterval(timer))
         >
           {{ p.key.toUpperCase() }}·{{ p.name }}
         </span>
-        <button class="btn" :class="{ 'is-active': muted }" @click="muted = !muted">
-          {{ muted ? '语音已静音' : '语音播报中' }}
+        <button
+          class="btn"
+          :class="{ 'is-active': muted, 'is-off': audioBlocked && !muted }"
+          :title="
+            audioBlocked && !muted
+              ? '浏览器拦截了自动播放：点击此按钮或页面任意处启用语音'
+              : '语音播报开关'
+          "
+          @click="toggleAudio"
+        >
+          {{ audioHint }}
         </button>
         <span class="badge mono">{{ clock }}</span>
       </div>

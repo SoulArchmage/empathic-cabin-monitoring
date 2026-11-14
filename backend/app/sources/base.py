@@ -1,8 +1,9 @@
 """数据源抽象。
 
-任务书要求接入"现有情绪识别系统"与"认知负荷监测系统"两路数据流。
-这两套系统属于外部可变依赖，因此抽象为 StateSource：
-当前用内置模拟器实现，后续对接真实系统只需补一个实现并改 .env 的 SOURCE_MODE。
+本系统只接入一路"现有情绪识别系统"：它每 2 秒输出一个滑动窗口的三分类结果
+（Neutral / Positive / Negative）与置信度。这套外部系统属于可变依赖，因此抽象为
+StateSource——内置模拟、WebSocket 直连、直接读取 state.json 三种实现可随时替换，
+业务代码只依赖本接口。
 """
 
 from __future__ import annotations
@@ -15,15 +16,16 @@ from ..schemas import new_session_id
 
 logger = logging.getLogger(__name__)
 
-SCENARIOS = ("calm", "anxiety_escalation", "recovery", "high_load")
+# 与前端 SCENARIO_LABELS、后端 ScenarioName 保持一致
+SCENARIOS = ("calm", "anxiety_escalation", "recovery", "fluctuation")
 
 
 class StateSource(abc.ABC):
-    """多源状态数据源。"""
+    """情绪窗口数据源。"""
 
     name: str = "base"
 
-    def __init__(self, bus: EventBus, sample_hz: float = 10.0) -> None:
+    def __init__(self, bus: EventBus, sample_hz: float = 0.5) -> None:
         self.bus = bus
         self.sample_hz = sample_hz
         self._scenario = "calm"

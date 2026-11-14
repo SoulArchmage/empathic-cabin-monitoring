@@ -110,12 +110,19 @@ def make_event() -> TriggerEvent:
     return TriggerEvent(
         ts=1.0,
         session_id="s-test",
-        kind="combined",
+        kind="negative_emotion",
         severity="mild",
         reason="测试触发",
         stats=WindowStats(
-            window_size=15, negative_ratio=0.8, high_load_ratio=0.8,
-            consec_abnormal=12, avg_cognitive_score=82.0, duration_s=1.2,
+            window="1.0s - 3.0s",
+            window_size=4,
+            negative_ratio=0.75,
+            positive_ratio=0.0,
+            neutral_ratio=0.25,
+            avg_confidence=0.8,
+            negative_confidence=0.82,
+            consec_abnormal=2,
+            duration_s=1.2,
         ),
     )
 

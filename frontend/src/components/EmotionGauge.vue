@@ -7,6 +7,8 @@ import { EMOTION_TEXT } from '../types/contract'
 const total = computed(() => Math.max(1, monitor.frames.length))
 
 const ringStyle = computed(() => {
+  // 还没有任何窗口时不要画成"整圈负向"，用中性底色表示等待数据
+  if (!monitor.frames.length) return { background: 'rgba(255, 255, 255, 0.08)' }
   const counts = emotionCounts.value
   const positive = (counts.Positive / total.value) * 360
   const neutral = (counts.Neutral / total.value) * 360
@@ -28,11 +30,10 @@ const emotionColor = computed(() => {
   return 'var(--neutral)'
 })
 
-const loadColor = computed(() => {
-  const level = current.value?.cognitive.level
-  if (level === 'High') return 'var(--negative)'
-  if (level === 'Medium') return 'var(--warn)'
-  return 'var(--positive)'
+/** 滑动窗口内的负向占比：与后端触发判定用的是同一口径 */
+const negativeShare = computed(() => {
+  if (!monitor.frames.length) return '—'
+  return `${((emotionCounts.value.Negative / monitor.frames.length) * 100).toFixed(0)}%`
 })
 </script>
 
@@ -40,7 +41,7 @@ const loadColor = computed(() => {
   <section class="panel">
     <h3 class="panel-title">
       实时情绪构成
-      <span class="badge mono">近 {{ monitor.frames.length }} 帧</span>
+      <span class="badge mono">近 {{ monitor.frames.length }} 个窗口</span>
     </h3>
 
     <div class="gauge-wrap">
@@ -71,11 +72,15 @@ const loadColor = computed(() => {
       </ul>
     </div>
 
-    <div class="load">
-      <span class="muted">认知负荷</span>
-      <strong class="mono" :style="{ color: loadColor }">
-        {{ current ? `${current.cognitive.score.toFixed(1)} · ${current.cognitive.level}` : '—' }}
-      </strong>
+    <div class="foot">
+      <div>
+        <span class="muted">当前窗口</span>
+        <strong class="mono">{{ current?.window || '—' }}</strong>
+      </div>
+      <div>
+        <span class="muted">负向占比</span>
+        <strong class="mono" :style="{ color: 'var(--negative)' }">{{ negativeShare }}</strong>
+      </div>
     </div>
   </section>
 </template>
@@ -152,13 +157,24 @@ section {
   color: var(--text);
 }
 
-.load {
+.foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px dashed var(--border);
+  font-size: 13px;
+}
+
+.foot div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.foot strong {
   font-size: 13px;
 }
 </style>

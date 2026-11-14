@@ -16,8 +16,7 @@ from .models import InterventionRecord, StateFrameRecord
 logger = logging.getLogger(__name__)
 
 _STATE_CSV_HEADER = (
-    "session_id,ts,emotion_label,emotion_confidence,cognitive_level,"
-    "cognitive_score,source"
+    "session_id,ts,emotion_label,emotion_confidence,window,source"
 )
 _INTERVENTION_CSV_HEADER = (
     "id,session_id,ts,kind,severity,reason,speech,strategy,risk,degraded,"
@@ -45,8 +44,7 @@ class Repository:
                     ts=frame.ts,
                     emotion_label=frame.emotion.label,
                     emotion_confidence=frame.emotion.confidence,
-                    cognitive_level=frame.cognitive.level,
-                    cognitive_score=frame.cognitive.score,
+                    window=frame.window,
                     source=frame.source,
                 )
             )
@@ -192,7 +190,7 @@ class Repository:
             async for r in result:
                 yield (
                     f"{r.session_id},{r.ts},{r.emotion_label},{r.emotion_confidence},"
-                    f"{r.cognitive_level},{r.cognitive_score},{r.source}\n"
+                    f"{r.window},{r.source}\n"
                 )
 
     async def export_interventions_csv(
@@ -246,8 +244,7 @@ class Repository:
             "session_id": r.session_id,
             "emotion_label": r.emotion_label,
             "emotion_confidence": r.emotion_confidence,
-            "cognitive_level": r.cognitive_level,
-            "cognitive_score": r.cognitive_score,
+            "window": r.window or "",
             "source": r.source,
         }
 

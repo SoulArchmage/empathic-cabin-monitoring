@@ -1,12 +1,14 @@
 <script setup lang="ts">
 /**
- * 认知负荷实时曲线。
- * 渲染节流 100ms：数据 10Hz 到达，但没必要 10Hz 重绘图表——这是"不卡顿"的前端一半。
+ * 情绪置信度实时曲线。
+ * 数据每 2 秒才有一个窗口，但仍然做 100ms 渲染节流——列布局变化时避免重复重绘。
+ * 点的颜色即情绪分类，一眼就能看出"哪里开始转负、置信度有多高"。
  */
 import * as echarts from 'echarts'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { monitor } from '../state'
+import { EMOTION_COLOR } from '../types/contract'
 
 const container = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
@@ -15,19 +17,14 @@ let throttled = false
 
 function render(): void {
   if (!chart) return
-  const frames = monitor.frames
-  const series = frames.map((f) => [f.ts * 1000, f.cognitive.score])
-  // 负向情绪单独用红点标出，让"情绪异常"与"负荷曲线"在同一时间轴上对齐观察
-  const negativePoints = frames
-    .filter((f) => f.emotion.label === 'Negative')
-    .map((f) => [f.ts * 1000, f.cognitive.score])
-
-  chart.setOption({
-    series: [
-      { id: 'load', data: series },
-      { id: 'negative', data: negativePoints }
-    ]
-  })
+  const data = monitor.frames.map((frame) => ({
+    value: [frame.ts * 1000, frame.emotion.confidence],
+    itemStyle: { color: EMOTION_COLOR[frame.emotion.label] },
+    window: frame.window,
+    labelText: frame.emotion.label
+  }))
+  // ECharts 的 setOption 默认合并；替换整份 data 即可，不必重建图表
+  chart.setOption({ series: [{ id: 'confidence', data }] })
 }
 
 function scheduleRender(): void {
@@ -44,14 +41,26 @@ onMounted(() => {
   chart = echarts.init(container.value)
   chart.setOption({
     animation: false,
-    grid: { left: 42, right: 18, top: 26, bottom: 26 },
+    grid: { left: 44, right: 18, top: 26, bottom: 26 },
     tooltip: {
       trigger: 'axis',
       confine: true,
       backgroundColor: 'rgba(13,20,36,0.92)',
       borderColor: 'rgba(255,255,255,0.12)',
       textStyle: { color: '#e9eefb', fontSize: 12 },
-      valueFormatter: (value: number) => `${Number(value).toFixed(1)}`
+      formatter: (params: unknown) => {
+        const list = params as Array<{ data?: { value?: number[]; window?: string; labelText?: string } }>
+        const item = list?.[0]?.data
+        if (!item?.value) return ''
+        const time = new Date(item.value[0]).toLocaleTimeString('zh-CN', { hour12: false })
+        return [
+          time,
+          `${item.labelText} · 置信度 ${(item.value[1] * 100).toFixed(0)}%`,
+          item.window ? `窗口 ${item.window}` : ''
+        ]
+          .filter(Boolean)
+          .join('<br/>')
+      }
     },
     xAxis: {
       type: 'time',
@@ -61,39 +70,38 @@ onMounted(() => {
     },
     yAxis: {
       type: 'value',
-      min: 0,
-      max: 100,
-      axisLabel: { color: '#8a97b0' },
+      min: 0.4,
+      max: 1,
+      axisLabel: { color: '#8a97b0', formatter: (value: number) => `${(value * 100).toFixed(0)}%` },
       splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }
     },
     series: [
       {
-        id: 'load',
-        name: '认知负荷',
+        id: 'confidence',
+        name: '情绪置信度',
         type: 'line',
-        showSymbol: false,
-        smooth: true,
-        lineStyle: { width: 2, color: '#4cc9f0' },
+        showSymbol: true,
+        symbolSize: 6,
+        smooth: false,
+        lineStyle: { width: 2, color: 'rgba(76,201,240,0.55)' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(76,201,240,0.35)' },
-            { offset: 1, color: 'rgba(76,201,240,0.02)' }
+            { offset: 0, color: 'rgba(76,201,240,0.22)' },
+            { offset: 1, color: 'rgba(76,201,240,0.01)' }
           ])
         },
         markLine: {
           silent: true,
           symbol: 'none',
-          label: { formatter: '高负荷线 70', color: '#ffb703', fontSize: 11 },
+          label: {
+            formatter: '门槛 0.55',
+            position: 'insideEndTop',
+            color: '#ffb703',
+            fontSize: 11
+          },
           lineStyle: { color: 'rgba(255,183,3,0.6)', type: 'dashed' },
-          data: [{ yAxis: 70 }]
+          data: [{ yAxis: 0.55 }]
         }
-      },
-      {
-        id: 'negative',
-        name: '负向情绪采样',
-        type: 'scatter',
-        symbolSize: 6,
-        itemStyle: { color: '#ff6b6b' }
       }
     ]
   })
@@ -115,8 +123,8 @@ onUnmounted(() => {
 <template>
   <section class="panel">
     <h3 class="panel-title">
-      认知负荷实时曲线
-      <span class="badge mono">滑动窗口 300 点 · 渲染节流 100ms</span>
+      情绪置信度实时曲线
+      <span class="badge mono">滑动窗口 300 个 · 点颜色 = 情绪分类</span>
     </h3>
     <div ref="container" class="chart"></div>
   </section>

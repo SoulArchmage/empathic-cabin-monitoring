@@ -1,39 +1,39 @@
 /**
  * 数据契约：与后端 app/schemas.py 一一对应。
- * 后端改字段时同步修改此文件，保证类型对齐（方案 D1 单一真源）。
+ *
+ * 输入只有感知系统每 2 秒给出的一个情绪窗口，本系统只使用三个标签：
+ * emotion（Positive / Neutral / Negative）、confidence、window。
  */
 
 export type EmotionLabel = 'Positive' | 'Negative' | 'Neutral'
-export type CognitiveLevel = 'Low' | 'Medium' | 'High'
 export type Severity = 'normal' | 'mild' | 'severe'
 export type Strategy = '呼吸引导' | '共情复述' | '环境调节' | '轻量提问'
 export type Risk = 'low' | 'medium' | 'high'
-export type ScenarioName = 'calm' | 'anxiety_escalation' | 'recovery' | 'high_load'
+export type ScenarioName = 'calm' | 'anxiety_escalation' | 'recovery' | 'fluctuation'
 
 export interface Emotion {
   label: EmotionLabel
   confidence: number
 }
 
-export interface Cognitive {
-  level: CognitiveLevel
-  score: number
-}
-
 export interface StateFrame {
   ts: number
   session_id: string
   emotion: Emotion
-  cognitive: Cognitive
+  /** 感知窗口区间，形如 "55.0s - 57.0s" */
+  window: string
   source: string
 }
 
 export interface WindowStats {
+  window: string
   window_size: number
   negative_ratio: number
-  high_load_ratio: number
+  positive_ratio: number
+  neutral_ratio: number
+  avg_confidence: number
+  negative_confidence: number
   consec_abnormal: number
-  avg_cognitive_score: number
   duration_s: number
 }
 
@@ -100,8 +100,7 @@ export interface StatePoint {
   session_id: string
   emotion_label: EmotionLabel
   emotion_confidence: number
-  cognitive_level: CognitiveLevel
-  cognitive_score: number
+  window: string
   source: string
 }
 
@@ -132,9 +131,9 @@ export interface Health {
 /** 模拟中文标签，集中在一处便于界面与文档保持一致 */
 export const SCENARIO_LABELS: Record<ScenarioName, string> = {
   calm: '平静常态',
-  anxiety_escalation: '焦虑升级',
+  anxiety_escalation: '负向升级',
   recovery: '情绪恢复',
-  high_load: '高认知负荷'
+  fluctuation: '情绪波动'
 }
 
 export const EMOTION_TEXT: Record<EmotionLabel, string> = {
@@ -143,9 +142,14 @@ export const EMOTION_TEXT: Record<EmotionLabel, string> = {
   Negative: '负向'
 }
 
+export const EMOTION_COLOR: Record<EmotionLabel, string> = {
+  Positive: '#37d399',
+  Neutral: '#96a3b8',
+  Negative: '#ff6b6b'
+}
+
 export const KIND_TEXT: Record<string, string> = {
   negative_emotion: '负向情绪',
-  high_cognitive_load: '高认知负荷',
-  combined: '情绪+负荷双异常',
-  recovered: '状态恢复'
+  recovered: '状态恢复',
+  stable: '状态平稳'
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 模拟演示注入：答辩时一键复现"平静 → 异常 → 干预 → 恢复"完整闭环。 */
+/** 模拟演示注入：答辩时一键复现"平静 → 负向 → 干预 → 恢复"完整闭环。 */
 import { ref } from 'vue'
 
 import { api } from '../api/http'
@@ -7,10 +7,10 @@ import { monitor } from '../state'
 import { SCENARIO_LABELS, type ScenarioName } from '../types/contract'
 
 const scenarios: { name: ScenarioName; desc: string }[] = [
-  { name: 'calm', desc: '情绪积极、负荷低，保持静默监测' },
-  { name: 'anxiety_escalation', desc: '负荷攀升，约 1s 陪伴、8s 升级转介' },
-  { name: 'high_load', desc: '仅负荷升高，验证单一异常源' },
-  { name: 'recovery', desc: '从异常回落，触发恢复确认' }
+  { name: 'calm', desc: '以 Neutral 为主，保持静默监测' },
+  { name: 'anxiety_escalation', desc: '约 4s 转负，8~10s 触发陪伴，持续恶化后升级转介' },
+  { name: 'fluctuation', desc: '每 10s 一次负向尖峰，单窗口不触发（验证去抖）' },
+  { name: 'recovery', desc: '从负向回到积极，触发恢复确认' }
 ]
 
 const busy = ref<ScenarioName | null>(null)

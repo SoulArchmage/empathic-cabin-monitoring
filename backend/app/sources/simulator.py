@@ -1,10 +1,18 @@
-"""内置状态模拟器：在没有真实硬件/外部系统时提供可控的多模态数据流。
+"""内置状态模拟器：按感知系统的真实节奏构造模拟数据。
 
-两个隐变量驱动全部输出：
-  stress ∈ [0,1]  —— 情绪压力（音视频情绪标签的来源）
-  load   ∈ [0,100] —— 认知负荷（脑电认知负荷等级的来源）
-模拟通过改变这两个隐变量的目标值 + 平滑跟随 + 高斯噪声，产生自然的状态曲线，
-并支持突变（焦虑升级），从而可复现地演示"平静 → 异常 → 共情 → 恢复"闭环。
+与旧版"10Hz 连续生理信号"不同，这里严格复刻 state.json 的形态：
+**每 2 秒输出一个滑动窗口的三分类情绪结果**，字段只有 emotion / confidence / window，
+情绪取值固定为 Neutral / Positive / Negative 三种，例如：
+
+    {"emotion": "Neutral", "confidence": 0.7196, "window": "55.0s - 57.0s"}
+
+一个隐变量 valence ∈ [-1, 1] 驱动全部输出：
+  valence > +0.25 → Positive；valence < -0.25 → Negative；其余为 Neutral。
+置信度随"离分类边界的距离"增大而升高（0.55 ~ 0.97），因此 Neutral 的置信度通常
+在 0.7 左右、明确 Negative 时更高——与真实算法给出的分布一致。
+
+模拟通过改变 valence 的目标值 + 一阶惯性跟随 + 高斯噪声，产生自然的情绪演变，
+并支持突变（焦虑升级），从而可复现地演示"平静 → 负向 → 共情 → 恢复"闭环。
 """
 
 from __future__ import annotations
@@ -16,40 +24,43 @@ import time
 
 from ..bus import EventBus
 from ..config import Settings, settings as default_settings
-from ..schemas import Cognitive, CognitiveLevel, Emotion, EmotionLabel, StateFrame
+from ..schemas import Emotion, EmotionLabel, StateFrame
 from .base import StateSource
 
 logger = logging.getLogger(__name__)
 
-# 每种模拟的目标值函数：输入其运行秒数，返回 (stress_target, load_target)
+_POSITIVE_BOUNDARY = 0.25
+_NEGATIVE_BOUNDARY = -0.25
+
+# 每种模拟的目标 valence：输入其运行秒数
 _SCENARIO_TARGETS = {
-    "calm": lambda t: (0.14, 24.0),
-    "high_load": lambda t: (0.45, 86.0),
-    "anxiety_escalation": lambda t: (
-        min(0.92, 0.14 + t / 12.0 * 0.78),
-        min(88.0, 24.0 + t / 12.0 * 64.0),
-    ),
-    "recovery": lambda t: (
-        max(0.14, 0.92 - t / 15.0 * 0.78),
-        max(24.0, 88.0 - t / 15.0 * 64.0),
-    ),
+    # 平静常态：略偏正向但落在 Neutral 区间，与真实录制数据"以 Neutral 为主"一致
+    "calm": lambda t: 0.10,
+    # 负向升级：约 4.5 秒内从常态跌到明确负向，触发"先陪伴、后转介"
+    "anxiety_escalation": lambda t: max(-0.95, 0.10 - t / 4.5 * 1.05),
+    # 情绪恢复：目标直接回到正向区间，约 3 个窗口（6s）内脱离 Negative
+    "recovery": lambda t: 0.40,
+    # 情绪波动：每 10 秒一个约 1.5 秒的负向尖峰；由于尖峰短于一个 2s 窗口，
+    # 至多命中一个感知窗口，用于验证"单窗口负向不触发"的去抖设计
+    "fluctuation": lambda t: 0.10 - (0.95 if (t % 10.0) < 1.5 else 0.0),
 }
 
 
-def _classify_emotion(stress: float) -> EmotionLabel:
-    if stress >= 0.55:
-        return "Negative"
-    if stress <= 0.32:
-        return "Positive"
-    return "Neutral"
+def _classify(valence: float) -> tuple[EmotionLabel, float]:
+    """把连续 valence 映射为三分类 + 置信度（置信度与离边界距离正相关）。"""
+    if valence >= _POSITIVE_BOUNDARY:
+        label: EmotionLabel = "Positive"
+        distance = min(1.0, (valence - _POSITIVE_BOUNDARY) / 0.75)
+    elif valence <= _NEGATIVE_BOUNDARY:
+        label = "Negative"
+        distance = min(1.0, (_NEGATIVE_BOUNDARY - valence) / 0.75)
+    else:
+        label = "Neutral"
+        # 区间中心（0.0）距离边界最远，置信度最高
+        distance = min(_POSITIVE_BOUNDARY - valence, valence - _NEGATIVE_BOUNDARY) / _POSITIVE_BOUNDARY
 
-
-def _classify_load(load: float) -> CognitiveLevel:
-    if load >= 70:
-        return "High"
-    if load >= 40:
-        return "Medium"
-    return "Low"
+    confidence = 0.58 + 0.30 * distance + random.gauss(0, 0.015)
+    return label, round(min(0.97, max(0.55, confidence)), 4)
 
 
 class SimulatorSource(StateSource):
@@ -58,53 +69,50 @@ class SimulatorSource(StateSource):
     def __init__(
         self,
         bus: EventBus,
-        sample_hz: float = 10.0,
+        sample_hz: float = 0.5,
         cfg: Settings | None = None,
     ) -> None:
         super().__init__(bus, sample_hz)
         self.cfg = cfg or default_settings
-        self._stress = 0.14
-        self._load = 24.0
+        self.window_seconds = max(0.5, float(self.cfg.window_seconds))
+        self._valence = 0.10
+        self._window_start = 0.0
         self._scenario_started = time.monotonic()
 
     def _on_scenario_changed(self, name: str) -> None:
+        # 切换模拟只重置"目标曲线"的起点，窗口时间轴继续前进
         self._scenario_started = time.monotonic()
 
     def reset(self) -> None:
-        self._stress, self._load = 0.14, 24.0
+        self._valence = 0.10
+        self._window_start = 0.0
         self._scenario_started = time.monotonic()
 
     def next_frame(self) -> StateFrame:
-        """生成一帧（同步，便于单元测试直接调用）。"""
-        elapsed = time.monotonic() - self._scenario_started
-        target_stress, target_load = _SCENARIO_TARGETS[self._scenario](elapsed)
+        """生成一个窗口的结果（同步，便于单元测试直接调用）。"""
+        start = self._window_start
+        end = start + self.window_seconds
+        self._window_start = end
 
-        # 一阶惯性跟随 + 高斯噪声，曲线平滑且不呆板
-        self._stress += (target_stress - self._stress) * 0.18
-        self._stress += random.gauss(0, 0.02)
-        self._stress = min(1.0, max(0.0, self._stress))
+        target = _SCENARIO_TARGETS[self._scenario](time.monotonic() - self._scenario_started)
+        # 一阶惯性跟随 + 高斯噪声：曲线平滑，又不会机械重复
+        self._valence += (target - self._valence) * 0.65
+        self._valence = min(1.0, max(-1.0, self._valence + random.gauss(0, 0.02)))
 
-        self._load += (target_load - self._load) * 0.18
-        self._load += random.gauss(0, 1.8)
-        self._load = min(100.0, max(0.0, self._load))
-
-        label = _classify_emotion(self._stress)
-        # 离分类边界越远，置信度越高
-        distance = min(abs(self._stress - 0.55), abs(self._stress - 0.32))
-        confidence = round(min(0.98, 0.62 + distance * 1.1), 3)
-
+        label, confidence = _classify(self._valence)
         return StateFrame(
             session_id=self.session_id,
             emotion=Emotion(label=label, confidence=confidence),
-            cognitive=Cognitive(
-                level=_classify_load(self._load), score=round(self._load, 2)
-            ),
+            window=f"{start:.1f}s - {end:.1f}s",
             source=self.name,
         )
 
     async def run(self) -> None:
-        interval = 1.0 / max(self.sample_hz, 0.1)
-        logger.info("模拟器启动，采样率 %.1f Hz", self.sample_hz)
+        logger.info(
+            "模拟器启动：窗口 %.1fs（%.1fHz），形态与感知系统 state.json 一致",
+            self.window_seconds,
+            self.sample_hz,
+        )
         while True:
             self.bus.publish(self.next_frame())
-            await asyncio.sleep(interval)
+            await asyncio.sleep(self.window_seconds)

@@ -3,8 +3,18 @@
 > 计算机网络综合工程设计 · 题目二
 > 基于大模型的疏导仓共情语音交互与状态监测系统（B/S 架构 · 事件驱动 · 适配器模式）
 
-一套可端到端运行的演示系统：**多源状态实时接入 → 异常状态去抖判定 → 大模型共情话术生成 →
+一套可端到端运行的演示系统：**感知系统状态实时接入 → 负向情绪去抖判定 → 大模型共情话术生成 →
 抗幻觉校验兜底 → 语音播报 → 状态曲线与干预日志落库/查询/导出**。
+
+数据输入与感知系统写出的 `state.json` 完全一致，本系统只使用其中三个标签：
+
+```json
+{"emotion": "Neutral", "confidence": 0.7196246385574341, "window": "55.0s - 57.0s"}
+```
+
+情绪固定为 **Neutral / Positive / Negative** 三种；`window` 是感知系统给出的滑动窗口区间
+（每 2 秒一个）。`latency_ms`、`camera_ok`、`frame_count`、`logs` 等字段属于算法侧诊断信息，
+本系统一律忽略。仓库内的 [samples/state.json](samples/state.json) 就是一份真实录制的输入样例。
 
 在没有配置任何云服务 API Key 的情况下也能完整跑通全链路（默认走 Mock 适配层，
 语音播报由浏览器原生能力承担）；配置 Key 后仅需改 `.env`，业务代码零改动。
@@ -42,16 +52,67 @@ npm run dev
 
 ### 3. 演示流程（答辩/录屏用）
 
-1. 进入「实时大屏」，确认顶部出现绿色「通道已连接」与 `9.x Hz` 帧率徽标；
-2. 点击左侧「模拟演示」→ **焦虑升级**：约 1 秒后出现「轻度 · 主动陪伴」共情话术卡片（同时语音播报），
-   持续约 8 秒恶化后自动升级为「高危 · 安全出口」专业转介话术；
-3. 点击 **情绪恢复**：出现「状态恢复」确认话术；
-4. 在「语音对话」面板按住说话（或直接输入文字）→ 观察 ASR 文本 → 共情回应 → 语音播报；
-5. 点击右上「历史日志」→ 查看会话列表 / 状态曲线采样点 / 干预记录，并导出两份 CSV。
+感知窗口每 2 秒一个，因此演示节奏以"窗口"为单位：
+
+1. 进入「实时大屏」，确认顶部出现绿色「通道已连接」与 `0.5 窗口/s` 徽标；
+2. 点击左侧「模拟演示」→ **负向升级**：约 4 秒后开始出现 Negative 窗口，约 8~10 秒触发
+   「轻度 · 主动陪伴」共情话术卡片（同时语音播报），持续恶化后约 14 秒升级为「高危 · 安全出口」转介话术；
+3. 点击 **情绪恢复**：约 8 秒后出现「状态恢复」确认话术；
+4. 点击 **情绪波动**：每 10 秒一个负向尖峰，验证"单个窗口不触发"的去抖设计；
+5. 在「语音对话」面板按住说话（或直接输入文字）→ 观察 ASR 文本 → 共情回应 → 语音播报；
+6. 点击右上「历史日志」→ 查看会话列表 / 情绪窗口采样点 / 干预记录，并导出两份 CSV。
 
 ---
 
-## 二、目录结构
+## 二、数据输入契约
+
+### 1. 三个标签
+
+| 字段 | 含义 | 取值 |
+|---|---|---|
+| `emotion` | 情绪三分类 | `Neutral` / `Positive` / `Negative` |
+| `confidence` | 分类置信度 | `0.0 ~ 1.0` |
+| `window` | 感知窗口区间 | 形如 `"55.0s - 57.0s"` |
+
+`window` 会被规范化为 `"起点s - 终点s"` 的形式（`"55-57"`、`{"start":55,"end":57}` 也能识别），
+并原样写入状态曲线与 CSV，保证每个曲线点都能追溯到感知系统当时的窗口，便于答辩举证。
+
+### 2. 三种接入方式（`SOURCE_MODE`）
+
+| 模式 | 说明 | 关键配置 |
+|---|---|---|
+| `simulator` | 内置模拟器，按 2s 窗口构造与 `state.json` 同形的数据 | 无 |
+| `external` | 直连感知系统 WebSocket（每窗口推送一条） | `EXTERNAL_STATE_URL` |
+| `file` | 轮询感知系统写出的 `state.json`（按 `window` 去重） | `STATE_FILE` |
+
+`external` 接收两种报文形态，解析器只取三个标签：
+
+```json
+{"type": "state", "payload": {"emotion": "Negative", "confidence": 0.86, "window": "55.0s - 57.0s"}}
+```
+
+```json
+{"emotion": "Negative", "confidence": 0.86, "window": "55.0s - 57.0s", "latency_ms": 2210, "logs": []}
+```
+
+文件被截断（感知侧正在写入）时会静默跳过、下一轮再读；同一 `window` 重复出现不会重复计数，
+避免触发判定被高频重复推送放大。
+
+### 3. 内置模拟的三种情绪演变
+
+| 模拟 | 说明 |
+|---|---|
+| `calm` | valence ≈ 0.10，以 Neutral 为主，保持静默监测 |
+| `anxiety_escalation` | 约 4.5s 内从常态跌到明确 Negative，演示"先陪伴、后转介" |
+| `recovery` | 目标直接回到 Positive，约 3 个窗口脱离 Negative |
+| `fluctuation` | 每 10s 一个约 1.5s 的负向尖峰（至多命中一个窗口），验证去抖不误触发 |
+
+置信度由"离分类边界距离"决定（0.55 ~ 0.97）：Neutral 通常 0.7 左右，明确 Negative 时更高，
+与真实算法给出的分布一致。
+
+---
+
+## 三、目录结构
 
 ```
 backend/
@@ -62,47 +123,57 @@ backend/
     bus.py             事件总线：多订阅者扇出 + drop-oldest 背压
     hub.py             WS 连接管理：每连接队列 + 独立发送协程
     api/               ws_monitor / ws_voice / logs / system
-    sources/           StateSource 抽象 + simulator + external(对接真实情绪/脑电系统)
+    sources/           StateSource 抽象 + simulator + external + file + parser(state.json)
     decision/          trigger(去抖状态机) / prompt / validator(抗幻觉) / empathizer
     providers/         llm(mock|deepseek|zhipu|qwen|openai) / asr(mock|openai) / tts(mock|edge)
     db/                models / session / repo
     service/pipeline.py  顶层业务编排
   tests/               pytest 用例 + smoke.py + loadcheck.py
-perception/            独立感知服务（算法侧骨架）：情绪/认知负荷定频推送
-  protocol.py          输出契约（与 schemas.py 的状态帧对齐）
-  backends.py          感知后端抽象 + simulator（2Hz 模拟）/ replay（离线结果回放）
-  serve.py             定频 WebSocket 服务端（对接 SOURCE_MODE=external）+ 命令行入口
+perception/            独立感知服务（算法侧骨架）：按 2s 窗口输出情绪三分类
+  protocol.py          输出契约（emotion / confidence / window）
+  backends.py          感知后端抽象 + simulator/replay，真实算法在此接入
+  serve.py             WebSocket 服务端 + 可选 state.json 落盘（--dump）
   README.md            用法、时序约定与接入真实算法的方式
 frontend/
   src/
     types/contract.ts  与 schemas.py 一一对应
     state.ts           全局响应式状态
     composables/       useMonitorSocket（重连/心跳）useVoiceSocket（录音上行）
-    components/        EmotionGauge / CognitiveLoadChart / StateTimeline /
+    components/        EmotionGauge / EmotionTrendChart / StateTimeline /
                        InterventionFeed / VoicePanel / ScenarioPanel
     views/             DashboardView / HistoryView
 docs/
   系统设计与工程实现报告.md
+samples/
+  state.json           真实感知系统输出样例（本系统的输入格式）
 ```
 
 ---
 
-## 三、接口速览
+## 四、接口速览
 
 | 类型 | 路径 | 说明 |
 |---|---|---|
 | WS | `/ws/monitor` | 下行：`meta` / `state` / `pending` / `intervention` / `speak` / `scenario` |
 | WS | `/ws/voice` | 上行：`0x01+音频` 二进制帧、`{"type":"audio_end"}`、`{"type":"text","text":"…"}` |
-| GET | `/api/health` | 各适配层实现与可用性、实时帧率、在线客户端数 |
-| POST | `/api/scenario` | 注入模拟演示：`calm` / `anxiety_escalation` / `recovery` / `high_load` |
+| GET | `/api/health` | 各适配层实现与可用性、窗口到达率、在线客户端数 |
+| POST | `/api/scenario` | 注入模拟演示：`calm` / `anxiety_escalation` / `recovery` / `fluctuation` |
 | GET | `/api/sessions` | 会话列表（时间范围、采样点数、干预次数） |
-| GET | `/api/states` | 状态曲线采样点（1Hz 聚合），支持会话与时间范围过滤、分页 |
+| GET | `/api/states` | 情绪窗口采样点（1Hz 聚合），支持会话与时间范围过滤、分页 |
 | GET | `/api/interventions` | 干预记录，含触发原因、话术、策略、风险、时延、是否降级 |
 | GET | `/api/export/states.csv` \| `/api/export/interventions.csv` | CSV 导出（流式） |
 
+状态帧（`/ws/monitor` 的 `state`）示例：
+
+```json
+{"ts": 1794668035.9, "session_id": "s-20261114-150530-ab12",
+ "emotion": {"label": "Neutral", "confidence": 0.7196},
+ "window": "55.0s - 57.0s", "source": "simulator"}
+```
+
 ---
 
-## 四、切换到真实云服务
+## 五、切换到真实云服务
 
 ### 1. 大模型：改两行即可
 
@@ -139,35 +210,39 @@ TTS_VOICE=zh-CN-XiaoxiaoNeural
 TTS_RATE=-4%
 TTS_PITCH=+0Hz
 
-# 对接真实的情绪识别 / 认知负荷系统
+# 对接真实的情绪识别系统：二选一
 SOURCE_MODE=external
-EXTERNAL_STATE_URL=ws://外部系统地址
+EXTERNAL_STATE_URL=ws://感知系统地址
+
+# 或：直接读感知系统写出的 state.json
+SOURCE_MODE=file
+STATE_FILE=D:\路径\state.json
 ```
 
 切换后 `/api/health` 会把对应适配层标记为 `real`，前端顶部徽标同步变化，
 避免"以为在调用真模型、实际在跑 Mock"的误判。
 
-没有现成外部系统时，本仓库自带的 `perception/` 感知服务骨架可直接充当 `EXTERNAL_STATE_URL`
-的数据源（内置模拟，无需算法与硬件；接入真实算法的方式见 `perception/README.md`）：
+没有现成感知系统时，本仓库自带的 `perception/` 服务骨架可直接充当数据源
+（内置窗口级模拟，无需算法与硬件；接入真实算法的方式见 `perception/README.md`）：
 
 ```powershell
-python -m perception.serve        # 监听 ws://127.0.0.1:8765，默认 10Hz
+python -m perception.serve                          # 监听 ws://127.0.0.1:8765
+python -m perception.serve --dump samples/state.json  # 同时按 state.json 形状落盘
 ```
 
-注意：切到 `external` 后，大屏「模拟演示」按钮不再驱动数据——外部流的模拟由感知侧
-`--scenario` 决定，且计时从感知服务进程启动时算起（先起服务、后开大屏会看到模拟已推进
-一段；重启感知服务即可复位，后端会自动重连）。
+注意：切到 `external` / `file` 后，大屏「模拟演示」按钮不再驱动数据——数据来自感知系统；
+模拟计时从感知服务进程启动时算起，重启感知服务即可复位，后端会自动重连。
 
 > 提示：真实大模型输出会被 `decision/validator.py` 做禁词与格式硬校验，
 > 不合规时自动降级为规则话术并在记录中标记 `degraded=true`，因此换任何模型都不会输出越界内容。
 
 ---
 
-## 五、测试
+## 六、测试
 
 ```powershell
 cd backend
-python -m pytest                 # 50 个单元/集成用例
+python -m pytest                 # 57 个单元/集成用例
 python -m tests.smoke            # 端到端冒烟（需先启动后端）
 python -m tests.loadcheck        # 并发推送 + 干预延迟压测（需先启动后端）
 ```
@@ -181,10 +256,12 @@ npm run typecheck                # vue-tsc --noEmit；npm run build 也会先跑
 
 `tests/` 说明：
 
-- `test_trigger.py` —— 去抖、冷却、升级打断、恢复重置、偶发噪声不误触发、降频聚合；
+- `test_trigger.py` —— 窗口去抖、置信度门槛、冷却、升级打断、恢复重置、偶发负向不误触发、降频聚合；
+- `test_sources.py` —— state.json 三标签解析（多余字段忽略）、窗口规范化、WS 包装解包、
+  file 模式按窗口去重与半写文件容错、模拟器输出形态；
 - `test_validator.py` —— JSON 容错、禁词拦截、超长截断、高危安全出口、兜底库覆盖；
 - `test_llm_provider.py` —— 厂商默认值、请求报文形态、错误透出、模型故障/超时降级；
 - `test_asr_provider.py` —— 工厂选择、Whisper 请求报文（multipart / 模型 / 文件名后缀）、错误透出、无 Key 未就绪；
 - `test_hub.py` —— 控制消息不被状态流阻塞、状态帧唤醒空闲发送协程、drop-oldest 背压；
 - `test_api.py` —— 健康检查、模拟切换、历史查询结构、CSV 导出；
-- `test_ws.py` —— 状态帧下行、1Hz 落库、语音文本上行闭环、空输入拒绝。
+- `test_ws.py` —— 状态帧下行（三分类 + 窗口，无认知负荷字段）、语音文本上行闭环、空输入拒绝。

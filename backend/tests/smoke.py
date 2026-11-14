@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 import httpx
 import websockets
 
-BASE = "http://127.0.0.1:8000"
-WS = "ws://127.0.0.1:8000/ws/monitor"
+# 支持指向非默认端口：$env:SMOKE_BASE="http://127.0.0.1:8011"; python -m tests.smoke
+BASE = os.environ.get("SMOKE_BASE", "http://127.0.0.1:8000").rstrip("/")
+WS = BASE.replace("http://", "ws://").replace("https://", "wss://") + "/ws/monitor"
 
 
 async def main() -> None:
@@ -48,9 +50,9 @@ async def main() -> None:
                 f"reason={item['reason']}\n        speech={item['speech']}"
             )
 
-        # 切回平静并等待恢复事件
+        # 切回平静并等待恢复事件（窗口 2s/个，恢复判定需连续 2 个窗口）
         await client.post("/api/scenario", json={"name": "recovery"})
-        await asyncio.sleep(6)
+        await asyncio.sleep(8)
 
         sessions = (await client.get("/api/sessions")).json()
         print("[会话列表]", json.dumps(sessions, ensure_ascii=False)[:300])
@@ -66,7 +68,7 @@ async def main() -> None:
         print(csv.text.splitlines()[:2])
 
         health2 = (await client.get("/api/health")).json()
-        print("[推送帧率]", health2["frame_rate_hz"], "Hz  在线客户端", health2["active_clients"])
+        print("[窗口率]", health2["frame_rate_hz"], "Hz  在线客户端", health2["active_clients"])
 
 
 if __name__ == "__main__":

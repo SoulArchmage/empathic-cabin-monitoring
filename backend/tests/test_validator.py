@@ -11,11 +11,14 @@ from app.decision.validator import (
 from app.schemas import Severity, TriggerEvent, WindowStats
 
 STATS = WindowStats(
-    window_size=15,
-    negative_ratio=0.8,
-    high_load_ratio=0.2,
-    consec_abnormal=12,
-    avg_cognitive_score=58.0,
+    window="1.0s - 3.0s",
+    window_size=4,
+    negative_ratio=0.75,
+    positive_ratio=0.0,
+    neutral_ratio=0.25,
+    avg_confidence=0.8,
+    negative_confidence=0.82,
+    consec_abnormal=2,
     duration_s=1.2,
 )
 
@@ -74,7 +77,7 @@ def test_severe_state_forces_safety_exit() -> None:
     """高危状态不让模型自由发挥，直接使用确定性转介模板。"""
     result = validate(
         '{"speech": "我们聊点开心的吧", "strategy": "轻量提问", "risk": "low"}',
-        make_event(kind="combined", severity="severe"),
+        make_event(kind="negative_emotion", severity="severe"),
     )
     assert result.speech == SAFE_REFERRAL_SPEECH
     assert result.risk == "high"
@@ -89,10 +92,11 @@ def test_severe_never_marked_low_risk() -> None:
 def test_fallback_library_covers_all_paths() -> None:
     """任何可能触发的组合都必须有确定性兜底话术，否则降级时会无话可说。"""
     required = [
-        (kind, severity)
-        for kind in ("negative_emotion", "high_cognitive_load", "combined")
-        for severity in ("mild", "severe")
-    ] + [("recovered", "normal")]
+        ("negative_emotion", "mild"),
+        ("negative_emotion", "severe"),
+        ("recovered", "normal"),
+        ("stable", "normal"),   # 语音对话时情绪平稳的快照事件
+    ]
 
     for key in required:
         assert key in FALLBACK_LIBRARY, f"缺少兜底话术：{key}"
