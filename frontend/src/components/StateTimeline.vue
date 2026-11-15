@@ -6,6 +6,7 @@
 import { computed } from 'vue'
 
 import { monitor } from '../state'
+import { LOAD_COLOR, LOAD_TEXT } from '../types/contract'
 
 const SLOTS = 120
 
@@ -32,8 +33,25 @@ const slots = computed(() => {
   })
 })
 
-const markers = computed(() => {
-  const frames = monitor.frames
+/** 与情绪色带同频的负荷色带：在每一帧的位置展示当时最新的 EEG 负荷等级 */
+const loadSlots = computed(() => {
+  const frames = monitor.frames.slice(-SLOTS)
+  const pad = SLOTS - frames.length
+  const leading = Array.from({ length: Math.max(0, pad) }, () => null)
+  return [...leading, ...frames].map((frame, index) => {
+    if (!frame || !frame.load) {
+      return { key: `load-pad-${index}`, color: 'transparent', title: '' }
+    }
+    return {
+      key: `load-${frame.ts}-${index}`,
+      color: LOAD_COLOR[frame.load.level],
+      title: `脑电负荷 ${LOAD_TEXT[frame.load.level]}（置信度 ${(frame.load.confidence * 100).toFixed(0)}%）
+EEG 窗口 ${frame.load.window || '—'}`
+    }
+  })
+})
+
+const markers = computed(() => {  const frames = monitor.frames
   if (!frames.length) return []
   const first = frames[Math.max(0, frames.length - SLOTS)].ts
   const last = frames[frames.length - 1].ts
@@ -63,6 +81,15 @@ const markers = computed(() => {
         :title="slot.title"
       />
     </div>
+    <div class="ribbon load">
+      <span
+        v-for="slot in loadSlots"
+        :key="slot.key"
+        class="slot"
+        :style="{ background: slot.color }"
+        :title="slot.title"
+      />
+    </div>
     <div class="track">
       <span
         v-for="marker in markers"
@@ -74,7 +101,7 @@ const markers = computed(() => {
     </div>
     <p class="hint muted">
       <span>← 较早</span>
-      <span>绿色=积极 · 灰色=中性 · 红色=负向（每格 2 秒感知窗口）</span>
+      <span>情绪：绿=积极 · 灰=中性 · 红=负向 ｜ 负荷：绿=低 · 蓝=中 · 黄=高 · 红=极高</span>
       <span>最新 →</span>
     </p>
   </section>
@@ -87,6 +114,11 @@ const markers = computed(() => {
   height: 26px;
   border-radius: 6px;
   overflow: hidden;
+}
+
+.ribbon.load {
+  height: 10px;
+  margin-top: 2px;
 }
 
 .slot {

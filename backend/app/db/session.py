@@ -46,11 +46,13 @@ SessionFactory = async_sessionmaker(engine, expire_on_commit=False, class_=Async
 
 
 def _prepare_schema(conn) -> None:
-    """建表；旧版状态表（含认知负荷字段）就地迁移，保留历史曲线。
+    """建表；旧库就地迁移，保留历史曲线。
 
-    旧版表结构与新契约的差异只有两列：少了 window、多了 cognitive_level / cognitive_score。
-    因此不做"删表重建"（那会丢掉历史曲线），而是补 window 列、删认知负荷列。
-    旧数据的 window 为空串，查询侧已按 "—" 处理。
+    历史上表结构变动过两次，都在这里做"加列/删列"而不是删表重建：
+
+    - 早期版本有 cognitive_level / cognitive_score，后来契约改为感知系统三标签，两列被移除；
+    - 现在重新接入独立的 EEG 负荷通道，但字段语义变为"负荷快照"，
+      因此新增 load_level / load_confidence（与旧列名区分，避免历史数据被误读）。
     """
     inspector = inspect(conn)
     if "state_frames" in inspector.get_table_names():
@@ -63,12 +65,30 @@ def _prepare_schema(conn) -> None:
                     "NOT NULL DEFAULT ''"
                 )
             )
+        added: list[str] = []
+        if "load_level" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE state_frames ADD COLUMN load_level VARCHAR(16) "
+                    "NOT NULL DEFAULT ''"
+                )
+            )
+            added.append("load_level")
+        if "load_confidence" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE state_frames ADD COLUMN load_confidence FLOAT "
+                    "NOT NULL DEFAULT 0"
+                )
+            )
+            added.append("load_confidence")
         for name in legacy:
             conn.execute(text(f"ALTER TABLE state_frames DROP COLUMN {name}"))
-        if legacy:
+        if legacy or added:
             logger.info(
-                "已迁移旧版状态表：移除 %s 并补充 window 列（历史数据保留）",
-                " / ".join(sorted(legacy)),
+                "已迁移旧版状态表：移除 %s、新增 %s（历史数据保留）",
+                " / ".join(sorted(legacy)) or "无",
+                " / ".join(added) or "无",
             )
     Base.metadata.create_all(conn)
 

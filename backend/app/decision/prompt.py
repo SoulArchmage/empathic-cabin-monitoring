@@ -1,8 +1,10 @@
-"""Prompt 工程：把"情绪三分类 + 置信度 + 窗口"状态翻译为结构化共情话术的提示词。
+"""Prompt 工程：把"情绪三分类 + 置信度 + 窗口（+ 脑电负荷等级）"翻译为结构化共情话术。
 
 采用五段式结构（角色 / 约束 / 输入 / 输出模式 / 示例），并强制 JSON 输出，
 便于下游做机器校验（见 validator.py）。用户消息里保留一行 [STATE] 机器可读摘要，
 既给模型看，也让 Mock Provider 与日志审计都能拿到同一份上下文。
+
+两路信号在主提示词里分工明确：情绪决定"陪伴还是 calming"，脑电负荷决定"要不要降速"。
 """
 
 from __future__ import annotations
@@ -18,7 +20,9 @@ SYSTEM_PROMPT = """你是智能疏导仓内的心理安抚助手"小仓"。你�
 2. 禁止提及药物、处方、停药、偏方，禁止承诺疗效（如"保证你会好起来"）；
 3. 话术不超过 60 个字，口语化、温和、可直接朗读；不要出现 Markdown、表情符号或列表；
 4. 不使用"抑郁症""焦虑症""精神病"等临床名词来描述用户；
-5. 无论用户状态如何，都必须保持尊重、不评判、不说教。
+5. 无论用户状态如何，都必须保持尊重、不评判、不说教；
+6. 若状态里给出脑电负荷偏高（high_load / 高 / 极高），优先给"降速、暂停、呼吸引导"这类
+   立刻可执行的减负动作，不要追问原因、不要评价他的能力。
 
 【输出格式】以 json 返回，且只返回一个对象，不要任何多余文字、不要代码块围栏：
 {"speech": "话术", "strategy": "呼吸引导|共情复述|环境调节|轻量提问", "risk": "low|medium|high"}"""
@@ -56,10 +60,27 @@ _FEW_SHOT = [
             '吸气四秒，呼气六秒，我陪你一起。", "strategy": "呼吸引导", "risk": "medium"}'
         ),
     },
+    {
+        "role": "user",
+        "content": (
+            '[STATE] {"kind": "high_load", "severity": "mild", "emotion": "Neutral", '
+            '"load_level": "High", "load_confidence": 0.91, '
+            '"window": "65.0s - 67.0s", "duration_s": 4.0}\n'
+            "请生成安抚话术。"
+        ),
+    },
+    {
+        "role": "assistant",
+        "content": (
+            '{"speech": "我注意到你已经连着忙了一阵，脑子有点吃紧了。先把手上这件事停一停，'
+            '跟我慢慢呼气六秒，再继续。", "strategy": "呼吸引导", "risk": "low"}'
+        ),
+    },
 ]
 
 _KIND_DESC = {
     "negative_emotion": "情绪识别在连续多个 2 秒窗口内判为 Negative（负向情绪）",
+    "high_load": "脑电监测显示认知负荷连续处于高/极高等级（任务过载、需要降速）",
     "recovered": "情绪已从负向回落至常态区间",
     "stable": "当前情绪平稳，没有持续负向",
 }
@@ -81,11 +102,20 @@ def state_digest(event: TriggerEvent) -> str:
         "kind": event.kind,
         "severity": event.severity,
         "emotion": _dominant(stats),
-        "confidence": round(stats.negative_confidence or stats.avg_confidence, 3),
+        "confidence": round(
+            (stats.load_confidence if event.kind == "high_load" else stats.negative_confidence)
+            or stats.avg_confidence,
+            3,
+        ),
         "negative_ratio": stats.negative_ratio if stats else 0.0,
         "window": stats.window if stats else "",
         "duration_s": stats.duration_s if stats else 0.0,
     }
+    # 只有接入脑电负荷通道时才出现这两个键，未接入时摘要与旧版本逐字一致
+    if stats is not None and stats.load_level:
+        payload["load_level"] = stats.load_level
+        payload["load_confidence"] = round(stats.load_confidence, 3)
+        payload["load_high_ratio"] = round(stats.load_high_ratio, 3)
     return "[STATE] " + json.dumps(payload, ensure_ascii=False)
 
 
@@ -97,6 +127,10 @@ def build_messages(event: TriggerEvent, hint: str | None = None) -> list[dict[st
         f"状态含义：{_KIND_DESC.get(event.kind, event.kind)}",
         f"严重程度：{event.severity}",
     ]
+    if event.stats is not None and event.stats.load_level:
+        lines.append(
+            f"脑电负荷：{event.stats.load_level}（置信度 {event.stats.load_confidence:.2f}）"
+        )
     if hint:
         lines.append(f"附加要求：{hint}")
     lines.append("请生成安抚话术。")
@@ -116,6 +150,10 @@ def build_reply_messages(
             "再给一个轻量、立刻可做的建议，不要追问过多问题。"
         ),
     ]
+    if event.stats is not None and event.stats.load_level:
+        lines.append(
+            f"脑电负荷：{event.stats.load_level}（置信度 {event.stats.load_confidence:.2f}）"
+        )
     if hint:
         lines.append(f"附加要求：{hint}")
     lines.append("请生成安抚话术。")

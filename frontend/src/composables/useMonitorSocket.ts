@@ -6,8 +6,9 @@
 import { onMounted, onUnmounted } from 'vue'
 
 import { api } from '../api/http'
-import { pushFrame, pushIntervention, lastSpeak, monitor, speakSignal } from '../state'
+import { pushFrame, pushIntervention, pushLoad, lastSpeak, monitor, speakSignal } from '../state'
 import type {
+  CognitiveLoad,
   Envelope,
   Intervention,
   PendingItem,
@@ -45,6 +46,10 @@ function dispatch(env: Envelope): void {
       break
     case 'state':
       pushFrame(payload.frame as unknown as StateFrame)
+      break
+    case 'load':
+      // 第二路数据源（EEG 负荷）单独推送：比情绪窗口更密，必须即时上屏
+      pushLoad(payload.load as unknown as CognitiveLoad)
       break
     case 'pending':
       monitor.pending = payload as unknown as PendingItem

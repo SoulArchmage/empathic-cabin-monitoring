@@ -42,9 +42,22 @@ def test_state_json_uses_only_three_labels() -> None:
     assert abs(frame.emotion.confidence - 0.7196) < 1e-3
     assert frame.window == "55.0s - 57.0s"
     assert frame.source == "file"
-    # 多余的感知侧诊断字段不会进入契约
+    # 多余的感知侧诊断字段不会进入契约；load 字段恒定存在，未接入 EEG 时为 None
     payload = frame.model_dump()
-    assert set(payload) == {"ts", "session_id", "emotion", "window", "source"}
+    assert set(payload) == {"ts", "session_id", "emotion", "load", "window", "source"}
+    assert payload["load"] is None
+
+
+def test_embedded_load_snapshot_is_optional() -> None:
+    """感知侧若顺手带了负荷快照，不应被丢弃；没带时也不凭空造数据。"""
+    with_load = {
+        **STATE_JSON,
+        "load": {"level": "High", "confidence": 0.86, "window": "55.0s - 59.0s"},
+    }
+    frame = parse_state_json(json.dumps(with_load, ensure_ascii=False), SESSION)
+    assert frame is not None and frame.load is not None
+    assert frame.load.level == "High"
+    assert frame.load.window == "55.0s - 59.0s"
 
 
 def test_websocket_envelope_is_unwrapped() -> None:

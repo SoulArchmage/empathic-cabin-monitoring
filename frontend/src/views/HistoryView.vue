@@ -3,7 +3,8 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { api } from '../api/http'
-import type { Intervention, SessionSummary, StatePoint } from '../types/contract'
+import type { Intervention, LoadLevel, SessionSummary, StatePoint } from '../types/contract'
+import { LOAD_TEXT } from '../types/contract'
 
 const sessions = ref<SessionSummary[]>([])
 const states = ref<StatePoint[]>([])
@@ -33,6 +34,16 @@ const exportInterventionsUrl = computed(() => api.exportUrl('interventions', que
 
 function time(ts: number): string {
   return new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false })
+}
+
+/** 历史表里的负荷等级：空串 = 当时没接入 EEG 服务，显示 "—" */
+function loadText(level: string): string {
+  if (!level) return '—'
+  return LOAD_TEXT[level as LoadLevel] ?? level
+}
+
+function loadConfidence(item: StatePoint): string {
+  return item.load_level ? `${(item.load_confidence * 100).toFixed(1)}%` : '—'
 }
 
 async function load(): Promise<void> {
@@ -147,7 +158,7 @@ onMounted(load)
 
     <section class="panel">
       <h3 class="panel-title">
-        状态曲线采样点（每 2s 情绪窗口）
+        状态曲线采样点（每 2s 情绪窗口 + 脑电负荷快照）
         <span class="badge mono">共 {{ stateTotal }} 条</span>
       </h3>
       <table>
@@ -157,6 +168,8 @@ onMounted(load)
             <th>会话</th>
             <th>情绪</th>
             <th>置信度</th>
+            <th>脑电负荷</th>
+            <th>负荷置信度</th>
             <th>感知窗口</th>
             <th>数据源</th>
           </tr>
@@ -167,11 +180,13 @@ onMounted(load)
             <td class="mono">{{ item.session_id }}</td>
             <td>{{ item.emotion_label }}</td>
             <td class="mono">{{ (item.emotion_confidence * 100).toFixed(1) }}%</td>
+            <td>{{ loadText(item.load_level) }}</td>
+            <td class="mono">{{ loadConfidence(item) }}</td>
             <td class="mono">{{ item.window || '—' }}</td>
             <td class="muted">{{ item.source }}</td>
           </tr>
           <tr v-if="!states.length">
-            <td colspan="6" class="empty">无数据</td>
+            <td colspan="8" class="empty">无数据</td>
           </tr>
         </tbody>
       </table>

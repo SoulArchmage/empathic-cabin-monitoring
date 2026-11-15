@@ -21,14 +21,22 @@ from .db.session import SessionFactory, dispose_db, init_db
 from .decision.empathizer import Empathizer
 from .decision.trigger import TriggerEngine
 from .hub import ConnectionHub
+from .load_store import LoadStore
 from .observability import record
 from .providers.asr.base import build_asr_provider
 from .providers.llm.base import build_llm_provider
 from .providers.tts.base import build_tts_provider
+from .schemas import Envelope
 from .service.pipeline import PipelineService
 from .sources.base import StateSource
 from .sources.external import ExternalSource
 from .sources.file import FileSource
+from .sources.load_source import (
+    LoadExternalSource,
+    LoadFileSource,
+    LoadSimulatorSource,
+    LoadSource,
+)
 from .sources.simulator import SimulatorSource
 
 logger = logging.getLogger(__name__)
@@ -40,6 +48,17 @@ def build_source(bus: EventBus) -> StateSource:
     if settings.source_mode == "external":
         return ExternalSource(bus, settings.sample_hz, settings)
     return SimulatorSource(bus, settings.sample_hz, settings)
+
+
+def build_load_source(store: LoadStore) -> LoadSource | None:
+    """第二路数据源：脑电认知负荷等级。off 时返回 None，契约行为与旧版本一致。"""
+    if settings.load_source_mode == "simulator":
+        return LoadSimulatorSource(store, settings)
+    if settings.load_source_mode == "external":
+        return LoadExternalSource(store, settings)
+    if settings.load_source_mode == "file":
+        return LoadFileSource(store, settings)
+    return None
 
 
 def _watch(task: asyncio.Task) -> None:
@@ -81,6 +100,15 @@ async def lifespan(app: FastAPI):
     bus = EventBus()
     hub = ConnectionHub(bus, settings)
     source = build_source(bus)
+    # 第二路数据源：负荷快照对外广播 + 贴到情绪帧上（见 LoadStore）
+    load_store = LoadStore()
+    hub.load_store = load_store
+    load_store.add_listener(
+        lambda load: hub.broadcast(
+            Envelope.of("load", load=load.model_dump()), droppable=True
+        )
+    )
+    load_source = build_load_source(load_store)
     llm = build_llm_provider(settings)
     asr = build_asr_provider(settings)
     tts = build_tts_provider(settings)
@@ -92,12 +120,15 @@ async def lifespan(app: FastAPI):
         tts=tts,
         repo=Repository(SessionFactory),
         cfg=settings,
+        load_store=load_store,
     )
 
     app.state.app_title = settings.app_name
     app.state.bus = bus
     app.state.hub = hub
     app.state.source = source
+    app.state.load_store = load_store
+    app.state.load_source = load_source
     app.state.llm = llm
     app.state.asr = asr
     app.state.tts = tts
@@ -110,12 +141,15 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(source.run(), name="state-source"),
         asyncio.create_task(_tts_selfcheck(tts), name="tts-selfcheck"),
     ]
+    if load_source is not None:
+        tasks.append(asyncio.create_task(load_source.run(), name="load-source"))
     for task in tasks:
         task.add_done_callback(_watch)
 
     logger.info(
-        "系统启动完成：数据源=%s LLM=%s ASR=%s TTS=%s",
+        "系统启动完成：情绪源=%s 负荷源=%s LLM=%s ASR=%s TTS=%s",
         source.name,
+        load_source.name if load_source else "off",
         llm.name,
         asr.name,
         tts.name,

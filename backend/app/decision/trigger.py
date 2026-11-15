@@ -1,12 +1,14 @@
-"""触发引擎：把连续的情绪窗口判定为"是否需要干预"的状态机。
+"""触发引擎：把连续的情绪窗口 / 脑电负荷窗口判定为"是否需要干预"的状态机。
 
 这是抗幻觉的第一道防线——**不逐窗调用大模型**。逐窗调用会导致 token 浪费、
 话术重复、以及把偶发的一个负向窗口当真异常而产生的幻觉式结论。因此这里做：
 
     滑动窗口统计 → 连续窗口去抖 → 置信度门槛 → 冷却期抑制 → 严重度升级打断冷却 → 恢复检测
 
-只有真正稳定的负向情绪才会被送去生成话术。由于感知系统每 2 秒才给出一个窗口，
-"连续 2 个窗口"即"持续 4 秒以上"，与旧版 10Hz 的 10 帧等价。
+本引擎同时看两路信号，各自独立判定、各自冷却：
+- 情绪通道：Negative 占比 + 负向置信度 → kind=negative_emotion（mild → severe）；
+- 脑电负荷通道：High / VeryHigh 连续出现 + 置信度 → kind=high_load（固定 mild，
+  因为负荷过高需要的是放松引导，不是心理危机转介，绝不走"安全出口"模板）。
 """
 
 from __future__ import annotations
@@ -16,7 +18,15 @@ import time
 from collections import deque
 
 from ..config import Settings, settings as default_settings
-from ..schemas import Severity, StateFrame, TriggerEvent, WindowStats
+from ..schemas import (
+    HIGH_LOAD_LEVELS,
+    LOAD_LEVEL_RANK,
+    LOAD_LEVEL_ZH,
+    Severity,
+    StateFrame,
+    TriggerEvent,
+    WindowStats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +43,25 @@ class TriggerEngine:
         self._in_abnormal = False
         self._recovery_streak = 0
         self._abnormal_since: float | None = None
+        # 脑电负荷通道的独立状态机（与情绪互不干扰）
+        self._load_consec = 0
+        self._load_cooldown_until = 0.0
+        self._load_last_rank = 0
 
     # ---- 对外接口 -------------------------------------------------------- #
     def evaluate(self, frame: StateFrame) -> TriggerEvent | None:
-        """返回 None 表示无需干预；否则返回一次 TriggerEvent。"""
+        """返回 None 表示无需干预；否则返回一次 TriggerEvent。
+
+        先判情绪、再判负荷：情绪是心理层面的强信号，命中后本窗口不再重复出事件，
+        避免同一时刻连推两条话术。
+        """
         self._window.append(frame)
+        event = self._evaluate_emotion(frame)
+        if event is not None:
+            return event
+        return self._evaluate_load(frame)
+
+    def _evaluate_emotion(self, frame: StateFrame) -> TriggerEvent | None:
         if len(self._window) < self.cfg.trigger_window:
             return None
 
@@ -102,6 +126,70 @@ class TriggerEngine:
         logger.info("触发干预 kind=%s severity=%s：%s", kind, severity, event.reason)
         return event
 
+    # ---- 脑电负荷通道 ---------------------------------------------------- #
+    def _evaluate_load(self, frame: StateFrame) -> TriggerEvent | None:
+        """高/极高负荷的独立状态机：连续去抖 + 置信度门槛 + 冷却期。
+
+        严重度固定 mild：负荷过高需要的是"降速、放松、呼吸引导"，而不是心理危机转介，
+        因此绝不复用 severe 的安全出口模板（那会把 12356 热线推给一个只是累了的人）。
+        """
+        load = frame.load
+        if load is None:
+            self._load_consec = 0
+            return None
+
+        trusted = load.confidence >= self.cfg.load_trigger_min_confidence
+        if load.level not in HIGH_LOAD_LEVELS or not trusted:
+            self._load_consec = 0
+            return None
+
+        self._load_consec += 1
+        needs = max(1, int(self.cfg.load_trigger_high_consec))
+        if self._load_consec < needs:
+            logger.debug(
+                "负荷 %s（置信度 %.2f）连续 %d/%d 个窗口，继续观察",
+                load.level,
+                load.confidence,
+                self._load_consec,
+                needs,
+            )
+            return None
+
+        rank = LOAD_LEVEL_RANK.get(load.level, 0)
+        now = frame.ts
+        cooled = now >= self._load_cooldown_until
+        escalated = rank > self._load_last_rank  # 高 → 极高 立刻升级，不被冷却挡住
+        if not cooled and not escalated:
+            # 冷却期内不打扰，但连续证据要重新积累：否则冷却一结束就会"秒触发"
+            self._load_consec = 0
+            return None
+
+        consec = self._load_consec
+        self._load_consec = 0
+        self._load_last_rank = rank
+        self._load_cooldown_until = now + self.cfg.load_trigger_cooldown_s
+
+        stats = self._build_stats()
+        stats.consec_abnormal = consec
+        event = TriggerEvent(
+            ts=frame.ts,
+            session_id=frame.session_id,
+            kind="high_load",
+            severity="mild",
+            reason=self._load_reason(stats),
+            stats=stats,
+        )
+        logger.info("触发干预 kind=high_load severity=mild：%s", event.reason)
+        return event
+
+    def _load_reason(self, stats: WindowStats) -> str:
+        level = LOAD_LEVEL_ZH.get(stats.load_level, stats.load_level or "—")
+        return (
+            f"脑电认知负荷持续偏高：最近 {stats.window_size} 个窗口内高/极高占比 "
+            f"{stats.load_high_ratio:.0%}，当前等级「{level}」"
+            f"（置信度 {stats.load_confidence:.2f}）"
+        )
+
     def snapshot(self) -> WindowStats:
         return self._build_stats()
 
@@ -119,6 +207,13 @@ class TriggerEngine:
             if stats.negative_ratio >= self.cfg.trigger_ratio:
                 kind, severity = "negative_emotion", self._severity(stats)
                 reason = self._reason(stats)
+            elif (
+                stats.load_level in HIGH_LOAD_LEVELS
+                and stats.load_confidence >= self.cfg.load_trigger_min_confidence
+            ):
+                # 情绪平稳但负荷偏高：对话上下文应说明"人是累的，不是情绪低落"
+                kind, severity = "high_load", "mild"
+                reason = self._load_reason(stats)
             else:
                 kind, severity = "stable", "normal"
                 reason = (
@@ -178,6 +273,10 @@ class TriggerEngine:
             if negative
             else 0.0
         )
+        # 负荷侧：只看带负荷快照的帧（未接入 EEG 时这些字段保持空/0）
+        loads = [f.load for f in frames if f.load is not None]
+        latest_load = loads[-1] if loads else None
+        high_loads = sum(1 for load in loads if load.level in HIGH_LOAD_LEVELS)
         # duration 用"异常持续时长"而非窗口跨度：窗口只有 4 个片段，无法反映真实恶化过程
         if self._abnormal_since is not None and frames:
             duration = max(0.0, frames[-1].ts - self._abnormal_since)
@@ -193,6 +292,9 @@ class TriggerEngine:
             negative_confidence=round(negative_confidence, 4),
             consec_abnormal=self._consec,
             duration_s=round(duration, 2),
+            load_level=latest_load.level if latest_load else "",
+            load_confidence=round(latest_load.confidence, 4) if latest_load else 0.0,
+            load_high_ratio=round(high_loads / len(loads), 4) if loads else 0.0,
         )
 
     def _severity(self, stats: WindowStats) -> Severity:

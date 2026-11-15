@@ -41,7 +41,9 @@ def test_monitor_stream_pushes_state_frames() -> None:
                     assert frame["emotion"]["label"] in {"Positive", "Negative", "Neutral"}
                     assert 0.0 <= frame["emotion"]["confidence"] <= 1.0
                     assert frame["window"].endswith("s"), "窗口区间未下发"
-                    assert "cognitive" not in frame, "认知负荷字段已从契约中移除"
+                    # 负荷字段恒定存在；测试环境未接入 EEG 服务，因此为 null
+                    assert "load" in frame and frame["load"] is None
+                    assert "cognitive" not in frame, "旧版 cognitive 字段不应再出现"
                     states += 1
             assert states >= 3, "未在预期时间内收到足够的状态帧"
 
@@ -53,6 +55,8 @@ def test_monitor_stream_pushes_state_frames() -> None:
         point = client.get("/api/states").json()["items"][0]
         assert point["emotion_label"] in {"Positive", "Negative", "Neutral"}
         assert "window" in point and "cognitive_score" not in point
+        # 落库侧保留负荷两列；未接入 EEG 时为空串 / 0.0，前端按 "—" 展示
+        assert point["load_level"] == "" and point["load_confidence"] == 0.0
 
 
 def test_voice_text_roundtrip_persists_intervention() -> None:

@@ -1,4 +1,4 @@
-"""state.json 报文解析：本系统只理解其中的三个标签。
+"""state.json 报文解析：本系统理解三个情绪标签，并可选地带上脑电负荷。
 
 感知系统写出的 state.json 形如：
 
@@ -8,6 +8,9 @@
      "frame_count": 300, "audio_samples": 1218816, "logs": [...]}
 
 本模块只取 emotion / confidence / window，其余字段（含 logs）全部忽略。
+另有一路脑电负荷数据（独立 EEG 服务）由 load_parser.py 负责；不过若感知侧顺手把
+负荷快照也写进了同一个报文（``"load": {...}`` / ``"cognitive": {...}``），
+这里会一并解析出来，避免"明明带了数据却被丢掉"。
 同时兼容两种外层包装，便于直连感知服务或直读文件：
 
     裸 state.json                        {"emotion": ..., "confidence": ..., "window": ...}
@@ -88,7 +91,7 @@ def unwrap(raw: Any) -> dict[str, Any] | None:
 def normalize_payload(
     raw: Any, session_id: str, source: str = "external"
 ) -> StateFrame | None:
-    """把一条 state.json / 报文映射为 StateFrame；只读取三个标签。"""
+    """把一条 state.json / 报文映射为 StateFrame；情绪只读三个标签，负荷快照可选。"""
     data = unwrap(raw)
     if data is None:
         return None
@@ -116,10 +119,18 @@ def normalize_payload(
         _pick(data.get("window"), data.get("window_range"), data.get("窗口"), default="")
     )
 
+    # 可选：同一报文里顺带带了脑电负荷快照（独立 EEG 通道也支持单独接入）
+    load = None
+    if any(key in data for key in ("load", "cognitive", "cognitive_load", "eeg", "workload")):
+        from .load_parser import parse_load  # 局部导入：load_parser 依赖本模块的 _pick
+
+        load = parse_load(data, source=source)
+
     try:
         return StateFrame(
             session_id=session_id,
             emotion=Emotion(label=norm_label, confidence=confidence),
+            load=load,
             window=window,
             source=source,
         )

@@ -7,16 +7,23 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
-# 与 app/db/session.py 一致：相对 sqlite 路径锚定到 backend/，不受启动目录影响
-TEST_DB = Path(__file__).resolve().parents[1] / "data" / "test_soothe.db"
+# 测试库放在系统临时目录：既不污染仓库里的 data/，也避免上次运行残留的
+# 库文件被占用（Windows 上 sqlite 文件被锁时 unlink 会直接 PermissionError）。
+TEST_DB_DIR = Path(tempfile.gettempdir()) / "soothe-tests"
+TEST_DB_DIR.mkdir(parents=True, exist_ok=True)
+TEST_DB = TEST_DB_DIR / "test_soothe.db"
 TEST_DB.unlink(missing_ok=True)
 
-os.environ["DB_URL"] = "sqlite+aiosqlite:///./data/test_soothe.db"
+os.environ["DB_URL"] = f"sqlite+aiosqlite:///{TEST_DB.as_posix()}"
 os.environ["LOG_LEVEL"] = "WARNING"
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["SOURCE_MODE"] = "simulator"
+# 测试默认关闭第二路（脑电负荷）数据源：用例只验证各自关心的那一路，
+# 避免内置负荷模拟在长用例里爬升到 High 而误触发 high_load 干预。
+os.environ["LOAD_SOURCE_MODE"] = "off"
 
 # 真实外部服务的凭证与地址一律清空：开发者本地 .env 往往填了真实 Key，
 # 环境变量优先级高于 .env，因此在这里显式置空可保证测试既不误发真实网络请求，

@@ -16,7 +16,7 @@ from .models import InterventionRecord, StateFrameRecord
 logger = logging.getLogger(__name__)
 
 _STATE_CSV_HEADER = (
-    "session_id,ts,emotion_label,emotion_confidence,window,source"
+    "session_id,ts,emotion_label,emotion_confidence,load_level,load_confidence,window,source"
 )
 _INTERVENTION_CSV_HEADER = (
     "id,session_id,ts,kind,severity,reason,speech,strategy,risk,degraded,"
@@ -37,6 +37,7 @@ class Repository:
 
     # ---- 写入 ------------------------------------------------------------ #
     async def add_state(self, frame: StateFrame) -> None:
+        load = frame.load
         async with self.session_factory() as session:
             session.add(
                 StateFrameRecord(
@@ -46,6 +47,8 @@ class Repository:
                     emotion_confidence=frame.emotion.confidence,
                     window=frame.window,
                     source=frame.source,
+                    load_level=load.level if load else "",
+                    load_confidence=load.confidence if load else 0.0,
                 )
             )
             await session.commit()
@@ -190,7 +193,7 @@ class Repository:
             async for r in result:
                 yield (
                     f"{r.session_id},{r.ts},{r.emotion_label},{r.emotion_confidence},"
-                    f"{r.window},{r.source}\n"
+                    f"{r.load_level or ''},{r.load_confidence},{r.window},{r.source}\n"
                 )
 
     async def export_interventions_csv(
@@ -246,6 +249,8 @@ class Repository:
             "emotion_confidence": r.emotion_confidence,
             "window": r.window or "",
             "source": r.source,
+            "load_level": r.load_level or "",
+            "load_confidence": r.load_confidence or 0.0,
         }
 
     @staticmethod

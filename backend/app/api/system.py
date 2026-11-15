@@ -29,6 +29,7 @@ def _status(
 
 def collect_providers(state) -> dict[str, ProviderStatus]:
     """汇总各适配层的实现与可用性，供前端常驻展示。"""
+    load_source = getattr(state, "load_source", None)
     return {
         "llm": _status("llm", state.llm.name, state.llm.mode, state.llm.ready),
         "asr": _status("asr", state.asr.name, state.asr.mode, state.asr.ready),
@@ -37,6 +38,14 @@ def collect_providers(state) -> dict[str, ProviderStatus]:
             name=state.source.name,
             mode="mock" if state.source.name == "simulator" else "real",
             ready=True,
+        ),
+        # 第二路数据源：EEG 负荷等级。off 表示未接入（前端徽标显示 LOAD·off）
+        "load": ProviderStatus(
+            name=load_source.name if load_source is not None else "off",
+            mode="real"
+            if load_source is not None and load_source.mode == "real"
+            else "mock",
+            ready=load_source is not None,
         ),
     }
 

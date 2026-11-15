@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     state_file: str = ""             # 感知系统写出的 state.json 路径
     file_poll_s: float = 0.3         # file 模式轮询间隔
 
+    # ---- 第二路数据源：脑电认知负荷等级（独立 EEG 监测服务）----
+    # off       : 不接入（StateFrame.load 恒为 None，行为与旧版本一致）
+    # simulator : 内置 4 级模拟，按"巡航→转弯→起飞→着陆"的负荷节奏爬升
+    # external  : 直连 EEG 服务的 WebSocket（LOAD_EXTERNAL_URL）
+    # file      : 轮询 EEG 服务写出的 JSON（LOAD_STATE_FILE）
+    load_source_mode: Literal["off", "simulator", "external", "file"] = "simulator"
+    load_external_url: str = "ws://127.0.0.1:8766"
+    load_state_file: str = ""
+    load_file_poll_s: float = 0.3
+    load_window_s: float = 4.0       # 申报书：EEG 侧 4s 滑动时间窗
+    load_step_s: float = 1.0         # 申报书：1s 滑动步长
+
     # ---- 触发引擎（抗幻觉第一道防线：先判定，再调 LLM）----
     # 0.5Hz 下 1 帧 = 2s：窗口 4 帧 = 8s，连续 2 帧 = 4s
     trigger_window: int = 4          # 滑动窗口帧数
@@ -52,6 +64,13 @@ class Settings(BaseSettings):
     trigger_cooldown_s: float = 60.0 # 同类干预冷却期
     trigger_recovery_frames: int = 2 # 判定恢复常态所需连续帧数
     trigger_escalate_after_s: float = 6.0  # 异常持续超过该时长才升级为 severe
+
+    # ---- 脑电负荷触发的干预规则（第二路数据源）----
+    # 与情绪规则独立：情绪走 negative_emotion，负荷走 high_load，各自冷却互不阻塞。
+    # 只在高/极高等级、置信度达标且连续出现时干预，避免单帧抖动误触发。
+    load_trigger_high_consec: int = 2        # 连续 N 帧高/极高（0.5Hz 下约 4s）
+    load_trigger_min_confidence: float = 0.6
+    load_trigger_cooldown_s: float = 90.0
 
     # ---- 持久化 ----
     db_url: str = "sqlite+aiosqlite:///./data/soothe.db"

@@ -1,11 +1,15 @@
 /**
  * 数据契约：与后端 app/schemas.py 一一对应。
  *
- * 输入只有感知系统每 2 秒给出的一个情绪窗口，本系统只使用三个标签：
- * emotion（Positive / Neutral / Negative）、confidence、window。
+ * 两路输入：
+ * 1. 情绪通道：感知系统每 2 秒给出的一个情绪窗口（emotion / confidence / window）；
+ * 2. 脑电负荷通道：独立 EEG 服务给出的 4 级负荷结果（Level / confidence / window），
+ *    以 load 快照挂在情绪帧上，同时也会单独以 `load` 信封实时推送。
  */
 
 export type EmotionLabel = 'Positive' | 'Negative' | 'Neutral'
+/** 脑电认知负荷四级：低 / 中 / 高 / 极高（与申报书表 4.1 一致） */
+export type LoadLevel = 'Low' | 'Medium' | 'High' | 'VeryHigh'
 export type Severity = 'normal' | 'mild' | 'severe'
 export type Strategy = '呼吸引导' | '共情复述' | '环境调节' | '轻量提问'
 export type Risk = 'low' | 'medium' | 'high'
@@ -16,10 +20,20 @@ export interface Emotion {
   confidence: number
 }
 
+export interface CognitiveLoad {
+  level: LoadLevel
+  confidence: number
+  /** EEG 侧窗口，形如 "12.0s - 16.0s"（4s 窗、1s 步长） */
+  window: string
+  source: string
+}
+
 export interface StateFrame {
   ts: number
   session_id: string
   emotion: Emotion
+  /** 该时刻最新的脑电负荷快照；未接入 EEG 服务时为 null */
+  load?: CognitiveLoad | null
   /** 感知窗口区间，形如 "55.0s - 57.0s" */
   window: string
   source: string
@@ -35,6 +49,10 @@ export interface WindowStats {
   negative_confidence: number
   consec_abnormal: number
   duration_s: number
+  /** 负荷判据：最新等级 / 置信度 / 窗口内"高及以上"占比 */
+  load_level: string
+  load_confidence: number
+  load_high_ratio: number
 }
 
 export interface Intervention {
@@ -86,6 +104,7 @@ export interface Envelope {
   type:
     | 'meta'
     | 'state'
+    | 'load'
     | 'pending'
     | 'intervention'
     | 'speak'
@@ -102,6 +121,9 @@ export interface StatePoint {
   emotion_confidence: number
   window: string
   source: string
+  /** 负荷快照：未接入 EEG 时为空串 / 0.0 */
+  load_level: string
+  load_confidence: number
 }
 
 export interface SessionSummary {
@@ -148,8 +170,26 @@ export const EMOTION_COLOR: Record<EmotionLabel, string> = {
   Negative: '#ff6b6b'
 }
 
+/** 负荷四级的展示顺序（由轻到重），与后端 LOAD_LEVELS 一致 */
+export const LOAD_ORDER: LoadLevel[] = ['Low', 'Medium', 'High', 'VeryHigh']
+
+export const LOAD_TEXT: Record<LoadLevel, string> = {
+  Low: '低',
+  Medium: '中',
+  High: '高',
+  VeryHigh: '极高'
+}
+
+export const LOAD_COLOR: Record<LoadLevel, string> = {
+  Low: '#37d399',
+  Medium: '#4cc9f0',
+  High: '#ffb703',
+  VeryHigh: '#ff6b6b'
+}
+
 export const KIND_TEXT: Record<string, string> = {
   negative_emotion: '负向情绪',
+  high_load: '脑电负荷偏高',
   recovered: '状态恢复',
   stable: '状态平稳'
 }

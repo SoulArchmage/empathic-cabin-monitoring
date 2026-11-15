@@ -19,6 +19,7 @@ from fastapi import WebSocket
 
 from .bus import EventBus
 from .config import Settings, settings as default_settings
+from .load_store import LoadStore
 from .schemas import Envelope, StateFrame
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,8 @@ class ConnectionHub:
         self.cfg = cfg or default_settings
         self._clients: dict[int, WSClient] = {}
         self.frame_meter = FrameRateMeter()
+        # 由 main 注入：广播前给状态帧贴上最新脑电负荷（未接入 EEG 服务时为 None）
+        self.load_store: LoadStore | None = None
 
     # ---- 连接生命周期 ---------------------------------------------------- #
     def add(self, ws: WebSocket) -> WSClient:
@@ -142,6 +145,9 @@ class ConnectionHub:
         try:
             while True:
                 frame: StateFrame = await q.get()
+                if self.load_store is not None:
+                    # 与 pipeline 的 attach 幂等：谁先拿到帧谁贴，后到者不覆盖
+                    frame = self.load_store.attach(frame)
                 self.frame_meter.tick()
                 self.broadcast(Envelope.of("state", frame=frame.model_dump()), droppable=True)
         finally:

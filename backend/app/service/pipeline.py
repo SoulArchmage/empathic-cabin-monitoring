@@ -18,6 +18,7 @@ from ..db.repo import Repository
 from ..decision.empathizer import Empathizer
 from ..decision.trigger import TriggerEngine
 from ..hub import ConnectionHub
+from ..load_store import LoadStore
 from ..observability import record
 from ..providers.tts.base import TtsProvider, TtsResult
 from ..schemas import (
@@ -38,6 +39,8 @@ def aggregate_frames(frames: list[StateFrame]) -> StateFrame:
     """把 1 秒内的若干个窗口结果聚合为一个采样点（降频落库）。"""
     last = frames[-1]
     n = len(frames)
+    # 负荷是状态量：取本批最后一个带负荷的帧，而不是"多数表决"（等级没有众数意义）
+    load = next((f.load for f in reversed(frames) if f.load is not None), None)
     return StateFrame(
         ts=last.ts,
         session_id=last.session_id,
@@ -45,6 +48,7 @@ def aggregate_frames(frames: list[StateFrame]) -> StateFrame:
             label=_majority([f.emotion.label for f in frames]),  # type: ignore[arg-type]
             confidence=round(sum(f.emotion.confidence for f in frames) / n, 3),
         ),
+        load=load,
         window=last.window,
         source=last.source,
     )
@@ -61,6 +65,7 @@ class PipelineService:
         tts: TtsProvider,
         repo: Repository,
         cfg: Settings | None = None,
+        load_store: LoadStore | None = None,
     ) -> None:
         self.bus = bus
         self.hub = hub
@@ -69,6 +74,7 @@ class PipelineService:
         self.tts = tts
         self.repo = repo
         self.cfg = cfg or default_settings
+        self.load_store = load_store
         self.latest_frame: StateFrame | None = None
         self._tasks: set[asyncio.Task] = set()
 
@@ -81,6 +87,9 @@ class PipelineService:
         try:
             while True:
                 frame: StateFrame = await queue.get()
+                if self.load_store is not None:
+                    # 把"此刻最新的脑电负荷"贴到情绪帧上：触发判定、落库、广播共用同一份
+                    frame = self.load_store.attach(frame)
                 self.latest_frame = frame
 
                 event = self.trigger.evaluate(frame)

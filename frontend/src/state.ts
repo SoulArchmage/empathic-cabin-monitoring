@@ -5,6 +5,7 @@
 import { computed, reactive, ref } from 'vue'
 
 import type {
+  CognitiveLoad,
   Intervention,
   PendingItem,
   ProviderStatus,
@@ -26,6 +27,8 @@ export const monitor = reactive({
   frameSeq: 0, // 单调递增序号：滑动窗口长度会饱和，靠它触发下游重绘
   latest: null as StateFrame | null,
   frames: [] as StateFrame[],
+  /** 最新一条脑电负荷（第二路数据源）；未接入时为 null */
+  load: null as CognitiveLoad | null,
   interventions: [] as Intervention[],
   pending: null as PendingItem | null,
   asrText: '',
@@ -48,6 +51,23 @@ export const emotionCounts = computed(() => {
   return counts
 })
 
+/** 滑动窗口内各负荷等级的出现次数（只统计带负荷快照的窗口） */
+export const loadCounts = computed(() => {
+  const counts = { Low: 0, Medium: 0, High: 0, VeryHigh: 0 }
+  for (const f of monitor.frames) {
+    if (f.load) counts[f.load.level] += 1
+  }
+  return counts
+})
+
+/** 最近窗口内"高及以上"的占比：与后端 load_high_ratio 同一口径 */
+export const highLoadShare = computed(() => {
+  const total = loadCounts.value.Low + loadCounts.value.Medium +
+    loadCounts.value.High + loadCounts.value.VeryHigh
+  if (!total) return null
+  return (loadCounts.value.High + loadCounts.value.VeryHigh) / total
+})
+
 /** 由滑动窗口内的帧时间戳实时推算推送帧率，比轮询 /api/health 更直观 */
 export const frameRate = computed(() => {
   const n = monitor.frames.length
@@ -63,6 +83,13 @@ export function pushFrame(frame: StateFrame): void {
   }
   monitor.frameSeq += 1
   monitor.latest = frame
+  // 情绪帧上带着"当时最新的负荷快照"：先用它兜底，独立的 load 推送到了再覆盖
+  if (frame.load) monitor.load = frame.load
+}
+
+/** 独立的负荷推送：EEG 侧 1Hz，比 0.5Hz 的情绪窗口更密，因此单独更新 */
+export function pushLoad(load: CognitiveLoad): void {
+  monitor.load = load
 }
 
 export function pushIntervention(item: Intervention): void {

@@ -5,8 +5,9 @@
     {"type": "state", "payload": {"emotion": "Neutral", "confidence": 0.7196,
                                   "window": "55.0s - 57.0s"}}
 
-本系统只消费 emotion / confidence / window 三个标签（解析见 parser.py），
-其余字段与日志一律忽略。断线后指数退避重连，保证系统对外部抖动具备韧性。
+本系统在情绪通道上只消费 emotion / confidence / window 三个标签（解析见 parser.py），
+其余字段与日志一律忽略；脑电负荷走独立的一路（见 load_source.py），两者互不阻塞。
+断线后指数退避重连，保证系统对外部抖动具备韧性。
 
 启用方式：.env 中设置 SOURCE_MODE=external 与 EXTERNAL_STATE_URL=ws://...
 """

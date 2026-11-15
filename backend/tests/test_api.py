@@ -22,8 +22,11 @@ async def test_health_reports_providers(client: httpx.AsyncClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert set(body["providers"]) == {"llm", "asr", "tts", "source"}
+    # source = 情绪通道，load = 第二路脑电负荷通道；测试环境把负荷通道关掉（off）
+    assert set(body["providers"]) == {"llm", "asr", "tts", "source", "load"}
     assert body["providers"]["llm"]["mode"] in {"mock", "real"}
+    assert body["providers"]["load"]["name"] == "off"
+    assert body["providers"]["load"]["ready"] is False
 
 
 @pytest.mark.parametrize("name", ["calm", "anxiety_escalation", "recovery", "fluctuation"])
